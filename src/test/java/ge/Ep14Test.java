@@ -130,7 +130,7 @@ public class Ep14Test {
 
     @Test
     void levelRenderDrawsTheCurrentWaterFrame() {
-        Level water = fill(8, 8, Tile.WATER);
+        Level water = fill(W / 8, H / 8, Tile.WATER); // covers the whole screen
         long[] ticks = {0, 1, 14, 15, 16, 29, 30, 44, 45, 59, 60, 74, 75, 1000, 1005};
         List<int[]> seen = new ArrayList<>();
         for (long t : ticks) {

@@ -79,7 +79,7 @@ final class NetRoles {
 
     /**
      * Headless client: connects (logging in as {@code name} at 0,0, or nameless if null) and waits for the ack.
-     * @return the connected client (caller closes it), or null after printing {@code client join failed ...}
+     * @return the connected client (caller closes it, which sends the disconnect; a shutdown hook does too), or null after printing {@code client join failed ...}
      */
     static Client joinHeadless(Address to, String name, PrintStream out) throws IOException {
         return joinHeadless(to, name, null, out);
@@ -94,6 +94,8 @@ final class NetRoles {
         if (c.awaitJoined(JOIN_TIMEOUT_MS)) {
             out.println("client joined server=" + to.text());
             out.flush();
+            // SIGTERM (or any JVM exit) still tells the server we are leaving; close is idempotent and bounded (~2.5 s)
+            Runtime.getRuntime().addShutdownHook(new Thread(c::close, "client-close"));
             return c;
         }
         c.close();

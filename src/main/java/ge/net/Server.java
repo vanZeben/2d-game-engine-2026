@@ -14,7 +14,7 @@ import java.util.Set;
  * The hosting side. Binds a UDP socket and keeps a registry of logged-in players. A login is either the named
  * {@link GamePacket.Login} or the bare {@link Protocol#JOIN} (nameless: the server picks a unique name); both are
  * acked with {@link Protocol#JOIN_ACK}, every time, since the first ack may have been lost. A client that repeats its
- * login is acked again but counted once. Pings are answered for any logged-in address.
+ * login is acked again but counted once. Pings are answered for any logged-in address. A {@link GamePacket.Disconnect} removes the player (see {@link #onDisconnect}).
  *
  * <p>Threading: the registry is only changed by the receive thread (login is handled in {@link #handle}), but other
  * threads read it ({@link #playerNames()}, {@link #clientCount()}), so every access goes through one lock and
@@ -85,7 +85,32 @@ public final class Server extends Endpoint {
             onLogin(from, login.name(), login.x(), login.y());
             return true;
         }
+        if (GamePacket.parse(data).orElse(null) instanceof GamePacket.Disconnect) {
+            onDisconnect(from);
+            return true;
+        }
         return false;
+    }
+
+    /**
+     * Removes the address's player and tells every other registered address with a {@link GamePacket.PlayerLeft}
+     * (nameless clients were never announced, so their leaving is not either). The sender is acked every time, also
+     * when it is not (or no longer) registered: a repeated disconnect means the first ack was lost, and changes nothing.
+     */
+    private void onDisconnect(SocketAddress from) {
+        List<SocketAddress> others = null;
+        byte[] notice = null;
+        synchronized (lock) {
+            Entry gone = players.remove(from);
+            if (gone != null && gone.named()) {
+                others = new ArrayList<>(players.keySet());
+                notice = new GamePacket.PlayerLeft(gone.name()).toBytes();
+            }
+        }
+        reply(from, Protocol.JOIN_ACK);
+        if (others != null) {
+            for (SocketAddress other : others) reply(other, notice);
+        }
     }
 
     /**

@@ -20,7 +20,7 @@ import java.util.function.Consumer;
  * calls {@link #poll}/{@link #drain} once per tick. Nothing else crosses the thread boundary.
  *
  * <p>Close: {@link #close()} closes the socket (which unblocks the blocked receive), then joins the threads with a
- * timeout. It is idempotent and safe from any thread.
+ * timeout. It is idempotent and safe from any thread. (A subclass may say goodbye first, then call super.)
  */
 abstract class Endpoint implements AutoCloseable {
     /** Inbox bound: when the game thread falls behind, the newest packets are dropped (UDP may drop anyway). */
@@ -99,7 +99,7 @@ abstract class Endpoint implements AutoCloseable {
     }
 
     @Override
-    public final void close() {
+    public void close() {
         if (!closed.compareAndSet(false, true)) return;
         socket.close(); // unblocks receive()
         onClose();

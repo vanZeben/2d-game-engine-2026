@@ -5,8 +5,8 @@ import ge.Screen;
 import ge.World;
 import ge.input.InputHandler;
 import java.io.IOException;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * A client-side game: a {@link World} of the local player plus a {@link RemotePlayer} for each other player the
@@ -21,8 +21,8 @@ public final class ClientGame implements AutoCloseable {
     private final Client client;
     private final String name;
     private final InputHandler noInput = new InputHandler();
-    /** Names of the remote players already in the world (game thread only). */
-    private final Set<String> remoteNames = new HashSet<>();
+    /** The remote players already in the world, by name (game thread only). */
+    private final Map<String, RemotePlayer> remotes = new HashMap<>();
 
     private ClientGame(World world, Client client, String name) {
         this.world = world;
@@ -71,8 +71,13 @@ public final class ClientGame implements AutoCloseable {
 
     private void apply(Packet p) {
         GamePacket.parse(p.data()).ifPresent(g -> {
-            if (g instanceof GamePacket.PlayerJoined j && !j.name().equals(name) && remoteNames.add(j.name())) {
-                world.add(new RemotePlayer(j.name(), j.x(), j.y()));
+            if (g instanceof GamePacket.PlayerJoined j && !j.name().equals(name) && !remotes.containsKey(j.name())) {
+                RemotePlayer r = new RemotePlayer(j.name(), j.x(), j.y());
+                remotes.put(j.name(), r);
+                world.add(r);
+            } else if (g instanceof GamePacket.PlayerLeft l) {
+                RemotePlayer r = remotes.remove(l.name()); // forgotten, so a later PlayerJoined adds it again
+                if (r != null) world.remove(r);
             }
         });
     }

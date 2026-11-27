@@ -297,7 +297,7 @@ public class Ep18Test {
     @Timeout(60)
     void jarClientAcceptsNameAndLogsInWithIt() throws Exception {
         String java = Paths.get(System.getProperty("java.home"), "bin", "java").toString();
-        Process p = new ProcessBuilder(java, "-Djava.awt.headless=true", "-jar", "build/game.jar", "--headless", "--ticks", "2",
+        Process p = new ProcessBuilder(java, "-Djava.awt.headless=true", "-jar", "build/game.jar", "--headless", "--realtime", "--ticks", "120",
                 "--client", "--connect", "127.0.0.1:" + server.port(), "--name", "jarbird").redirectErrorStream(true).start();
         StringBuilder out = new StringBuilder();
         Thread drain = new Thread(() -> {
@@ -308,11 +308,13 @@ public class Ep18Test {
         });
         drain.start();
         try {
+            until(() -> server.playerNames().contains("jarbird") || !p.isAlive(), 10000);
+            boolean registeredWhileRunning = server.playerNames().contains("jarbird");
             assertTrue(p.waitFor(40, TimeUnit.SECONDS), "client hung: " + out);
             drain.join(2000);
             assertEquals(0, p.exitValue(), out.toString());
             assertTrue(out.toString().contains("client joined server=127.0.0.1:" + server.port()), out.toString());
-            assertTrue(server.playerNames().contains("jarbird"), server.playerNames().toString());
+            assertTrue(registeredWhileRunning, "server never listed jarbird while the client ran: " + out);
         } finally {
             p.destroyForcibly();
         }

@@ -13,11 +13,15 @@ import java.util.concurrent.locks.ReentrantLock;
 /**
  * The joining side. {@link #connect} returns at once; a background thread sends the login (a named
  * {@link GamePacket.Login}, or the bare nameless {@link Protocol#JOIN}), retransmitting since UDP is lossy, until the
- * server's ack arrives or the client is closed. Packets that are not connection-level go to the inbox for the game thread.
+ * server's ack arrives or the client is closed; closing a joined client sends a disconnect first (see {@link #close()}). Packets that are not connection-level go to the inbox for the game thread.
  */
 public final class Client extends Endpoint {
     /** Pause between join requests while waiting for the ack. */
     static final long RETRANSMIT_MS = 100;
+    /** Pause between disconnect sends while waiting for the ack. */
+    static final long DISCONNECT_RETRANSMIT_MS = 250;
+    /** Most disconnects sent by one {@link #close()}; with the pause above, close returns within ~2.5 s. */
+    static final int DISCONNECT_MAX_SENDS = 10;
 
     private final InetSocketAddress server;
     /** What the join loop repeats until acked: a login packet, or the bare nameless join. */
@@ -26,6 +30,12 @@ public final class Client extends Endpoint {
     private volatile boolean joined;
     /** Counted down on join or close: wakes the join loop and any awaitJoined. */
     private final CountDownLatch wake = new CountDownLatch(1);
+
+    /** Held for the whole of {@link #close()}: a second closer waits for the goodbye instead of cutting it short. */
+    private final Object closeMutex = new Object();
+    /** Set just before the disconnect goes out; from then on a join ack is the server's answer to it. */
+    private volatile boolean leaving;
+    private final CountDownLatch leaveAcked = new CountDownLatch(1);
 
     /** Guards {@link #pongs}; {@link #pongArrived} wakes a waiting {@link #ping}. */
     private final ReentrantLock pongLock = new ReentrantLock();
@@ -146,6 +156,7 @@ public final class Client extends Endpoint {
         if (Protocol.isJoinAck(data)) {
             joined = true;
             wake.countDown();
+            if (leaving) leaveAcked.countDown();
             return true;
         }
         if (Protocol.isPong(data)) {
@@ -153,6 +164,36 @@ public final class Client extends Endpoint {
             return true;
         }
         return false; // game packets go to the game thread
+    }
+
+    /**
+     * If joined, first tells the server: sends {@link GamePacket.Disconnect}, resending every
+     * {@value #DISCONNECT_RETRANSMIT_MS} ms until the ack arrives, at most {@value #DISCONNECT_MAX_SENDS} sends in all
+     * (so it returns within about 2.5 s even if the server never answers). A client that was never acked has nothing to
+     * leave. Then closes the socket and threads. Idempotent and safe from any thread, including a shutdown hook.
+     */
+    @Override
+    public void close() {
+        synchronized (closeMutex) {
+            if (!isClosed()) sayGoodbye();
+            super.close();
+        }
+    }
+
+    private void sayGoodbye() {
+        if (!joined) return;
+        leaving = true;
+        byte[] bye = new GamePacket.Disconnect().toBytes();
+        try {
+            for (int sent = 0; sent < DISCONNECT_MAX_SENDS; sent++) {
+                send(server, bye);
+                if (leaveAcked.await(DISCONNECT_RETRANSMIT_MS, TimeUnit.MILLISECONDS)) return;
+            }
+        } catch (IOException e) {
+            // socket unusable: nothing more to send
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); // give up waiting, but still close
+        }
     }
 
     @Override

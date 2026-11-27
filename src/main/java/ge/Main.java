@@ -27,6 +27,7 @@ import java.nio.file.Paths;
  *                    --ticks N) or, with no ack within 3 s, "client join failed server=HOST:PORT" and exits 3; if the server
  *                    rejects the name as taken it prints "client login rejected name=NAME" and exits 4
  *                    (--server and --client are exclusive; --client needs --connect)
+ *   --help / --version (alone)  print usage / "game VERSION" to stdout and exit 0
  *   --scene game:...  a game scene may end with :stone=TX,TY;... and/or :water=TX,TY;... (each at most once, either
  *                    order): those cells become stone (solid) or water (animated; the player swims in it)
  * Without --scene the window plays a generated world (game:gen).
@@ -35,7 +36,48 @@ public class Main {
     /** What the window plays when no --scene is given: a 128x128-tile world, the player in the middle. */
     private static final String DEFAULT_WINDOW_SCENE = "game:gen:128,128," + Game.DEFAULT_SEED + "@512,512";
 
+    /** Printed by --version: one line, "game " plus the version. */
+    static final String VERSION_LINE = "game 1.0";
+
+    /** Printed to stdout by --help. */
+    static final String HELP = String.join("\n",
+            "Usage: java -jar game.jar [options]",
+            "",
+            "Roles (default: single player):",
+            "  --server               host a game over UDP",
+            "  --client               join a server (needs --connect)",
+            "  --connect HOST:PORT    server to join (with --client)",
+            "  --name NAME            player name, 1-16 of A-Za-z0-9_ (with --client)",
+            "  --port P               UDP port to host on, default 0 = any free port (with --server)",
+            "  --headless             no window; run --ticks N ticks (a headless server runs until killed unless --ticks is given)",
+            "",
+            "Other options:",
+            "  --ticks N              ticks to run headless (default 600)",
+            "  --realtime             with --headless, pace ticks at 60 per second",
+            "  --dump-dir DIR         with --headless, write PNG frames to DIR",
+            "  --scene SPEC           scene to play, e.g. game:gen:128,128,SEED@512,512",
+            "  --seed S               world seed",
+            "  --script FILE          scripted key events (headless)",
+            "  --trace-input, --trace-player, --trace-swim   per-tick trace output (headless)",
+            "  --help                 show this help and exit",
+            "  --version              show the version and exit",
+            "",
+            "Examples:",
+            "  java -jar game.jar --server --port 4455",
+            "  java -jar game.jar --client --connect 127.0.0.1:4455 --name ryan",
+            "");
+
     public static void main(String[] args) {
+        if (args.length == 1 && args[0].equals("--help")) {
+            System.out.print(HELP);
+            System.exit(0);
+            return;
+        }
+        if (args.length == 1 && args[0].equals("--version")) {
+            System.out.println(VERSION_LINE);
+            System.exit(0);
+            return;
+        }
         boolean headless = false;
         long ticks = 600;
         Path dumpDir = null;

@@ -58,8 +58,10 @@ import org.junit.jupiter.api.io.TempDir;
  *    cells Tile.WATER (outside the level ignored). :stone= and :water= may each appear at most once, in either
  *    order, after the spawn; malformed -> IllegalArgumentException from Scene.parse. If a cell is in both lists
  *    the result is not pinned. Document in the Scene javadoc.
- * 7. --trace-player lines become `tick=T x=X y=Y camx=CX camy=CY dir=D frame=F swim=S` (S = 0|1 from isSwimming()
- *    after that tick's update); earlier fields unchanged (append-only).
+ * 7. New opt-in flag --trace-swim (requires --trace-player; without it the jar exits 2). With both flags the
+ *    --trace-player lines become `tick=T x=X y=Y camx=CX camy=CY dir=D frame=F swim=S` (S = 0|1 from isSwimming()
+ *    after that tick's update); earlier fields unchanged (append-only). WITHOUT --trace-swim the lines are exactly
+ *    as in Ep11 (no suffix; Ep11Test full-matches them).
  */
 public class Ep14Test {
 
@@ -348,7 +350,7 @@ public class Ep14Test {
         Path dump = dir.resolve("frames");
         int ticks = 50;
         Run r = runJar("--headless", "--ticks", "" + ticks, "--dump-dir", dump.toString(),
-                "--scene", "game:grass:20,20@80,80:" + waterOpt(4, 6, 9, 9), "--trace-player");
+                "--scene", "game:grass:20,20@80,80:" + waterOpt(4, 6, 9, 9), "--trace-player", "--trace-swim");
         assertEquals(0, r.exit, r.out);
         Level l = grass(20, 20);
         for (int cy = 6; cy <= 9; cy++) for (int cx = 4; cx <= 9; cx++) l.setTile(cx, cy, Tile.WATER);
@@ -364,6 +366,15 @@ public class Ep14Test {
         assertFalse(java.util.Arrays.equals(frames[14], frames[29]), "and again at tick 30");
         assertArrayEquals(frames[0], frames[44], "back to frame 0 at tick 45");
         for (String line : r.out.split("\\R")) if (line.startsWith("tick=") && line.contains(" x=")) assertTrue(line.endsWith(" swim=0"), line);
+    }
+
+    @Test
+    void traceWithoutTraceSwimHasNoSwimField(@TempDir Path dir) throws Exception {
+        Run r = runJar("--headless", "--ticks", "3", "--scene", "game:grass:20,20@80,80:" + waterOpt(10, 10, 11, 11), "--trace-player");
+        assertEquals(0, r.exit, r.out);
+        int n = 0;
+        for (String line : r.out.split("\\R")) if (line.startsWith("tick=") && line.contains(" x=")) { n++; assertFalse(line.contains("swim="), line); }
+        assertEquals(3, n, r.out);
     }
 
     // ---- jar: scripted walk into water and out ---------------------------------------------------------
@@ -401,7 +412,7 @@ public class Ep14Test {
         Path dump = dir.resolve("frames");
         int ticks = 92;
         Run r = runJar("--headless", "--ticks", "" + ticks, "--script", sc.toString(), "--dump-dir", dump.toString(),
-                "--scene", "game:grass:30,30@120,112:" + waterOpt(20, 14, 23, 17), "--trace-player");
+                "--scene", "game:grass:30,30@120,112:" + waterOpt(20, 14, 23, 17), "--trace-player", "--trace-swim");
         assertEquals(0, r.exit, r.out);
         List<String> lines = new ArrayList<>();
         for (String l : r.out.split("\\R")) if (l.startsWith("tick=") && l.contains(" x=")) lines.add(l);

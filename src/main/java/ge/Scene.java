@@ -1,5 +1,6 @@
 package ge;
 
+import ge.gfx.Font;
 import ge.gfx.Palette;
 import ge.gfx.SpriteSheet;
 
@@ -12,6 +13,10 @@ import ge.gfx.SpriteSheet;
  * <ul>
  *   <li>{@code tile:TX,TY@PX,PY[:colours=C0,C1,C2,C3][:mirror=M]} - the tile at pixel (PX,PY) (may be negative)</li>
  *   <li>{@code fill:TX,TY[:colours=C0,C1,C2,C3][:mirror=M]} - the tile at every (8*i, 8*j) covering the screen</li>
+ *   <li>{@code text:X,Y[:colours=C0,C1,C2,C3]:TEXT} - {@link Font} text with its top-left at pixel (X,Y)
+ *       (may be negative). TEXT is the last field, verbatim (it may contain ':' and may be empty); the colours
+ *       option is recognised only when the part after "X,Y:" starts with {@code colours=}. Without it the
+ *       text is white ink on a transparent background.</li>
  * </ul>
  * The optional parts may come in either order, each at most once. M is {@code x}, {@code y} or {@code xy}
  * (flip each 8x8 block in place on X, on Y, or both).
@@ -22,6 +27,10 @@ public final class Scene {
     /** Stand-in colours (index i -> 0x555555 * i) used when a scene gives no colours. */
     public static final int[] INTERIM_GREY = {0x000000, 0x555555, 0xAAAAAA, 0xFFFFFF};
 
+    private static final String TEXT_PREFIX = "text:";
+    /** Default text colours: white ink (slot 3) over a transparent background. */
+    private static final int[] TEXT_COLOURS = {Palette.TRANSPARENT, Palette.TRANSPARENT, Palette.TRANSPARENT,
+        Palette.index(5, 5, 5)};
     private static final String PATH = "/sprite_sheet.png";
     private static SpriteSheet sharedSheet;
 
@@ -30,10 +39,13 @@ public final class Scene {
     private final int tileX, tileY, x, y;
     /** Screen.MIRROR_* bit set. */
     private final int mirror;
+    /** The text of a {@code text:} scene, or null for a tile scene. */
+    private final String text;
     /** Palette indexes / TRANSPARENT, or null for the interim grey. */
     private final int[] colours;
 
-    private Scene(SpriteSheet sheet, boolean fill, int tileX, int tileY, int x, int y, int[] colours, int mirror) {
+    private Scene(SpriteSheet sheet, boolean fill, int tileX, int tileY, int x, int y, int[] colours, int mirror,
+            String text) {
         this.sheet = sheet;
         this.fill = fill;
         this.tileX = tileX;
@@ -42,6 +54,7 @@ public final class Scene {
         this.y = y;
         this.colours = colours;
         this.mirror = mirror;
+        this.text = text;
     }
 
     /** The sprite sheet is decoded once and shared by every scene in the process. */
@@ -52,6 +65,7 @@ public final class Scene {
 
     /** Parses a scene spec and loads the sprite sheet it needs. @throws IllegalArgumentException if malformed. */
     public static Scene parse(String spec) {
+        if (spec.startsWith(TEXT_PREFIX)) return parseText(spec);
         String bad = "bad --scene '" + spec + "' (expected tile:TX,TY@PX,PY[:colours=C0,C1,C2,C3][:mirror=M] "
                 + "or fill:TX,TY[:colours=C0,C1,C2,C3][:mirror=M]; Ci = three digits 0..5 or t; M = x, y or xy)";
         String[] parts = spec.split(":", -1);
@@ -92,7 +106,26 @@ public final class Scene {
             throw new IllegalArgumentException("bad --scene '" + spec + "': tile outside the "
                     + tilesX + "x" + tilesY + " grid");
         }
-        return new Scene(sheet, fill, tile[0], tile[1], pos[0], pos[1], colours, mirror);
+        return new Scene(sheet, fill, tile[0], tile[1], pos[0], pos[1], colours, mirror, null);
+    }
+
+    /** {@code text:X,Y[:colours=...]:TEXT}. TEXT is everything after the delimiter, so it may contain ':'. */
+    private static Scene parseText(String spec) {
+        String bad = "bad --scene '" + spec + "' (expected text:X,Y[:colours=C0,C1,C2,C3]:TEXT; "
+                + "Ci = three digits 0..5 or t)";
+        String rest = spec.substring(TEXT_PREFIX.length());
+        int colon = rest.indexOf(':');
+        if (colon < 0) throw new IllegalArgumentException(bad); // no text field
+        int[] pos = ints(rest.substring(0, colon), bad);
+        String after = rest.substring(colon + 1);
+        int[] colours = TEXT_COLOURS;
+        if (after.startsWith("colours=")) {
+            int end = after.indexOf(':');
+            if (end < 0) throw new IllegalArgumentException(bad); // colours but no text field
+            colours = colours(after.substring(0, end), bad);
+            after = after.substring(end + 1);
+        }
+        return new Scene(sheet(), false, 0, 0, pos[0], pos[1], colours, Screen.MIRROR_NONE, after);
     }
 
     private static int[] ints(String pair, String error) {
@@ -140,7 +173,9 @@ public final class Scene {
 
     public void render(Screen screen) {
         screen.clear(0x000000);
-        if (fill) {
+        if (text != null) {
+            Font.render(screen, sheet, text, x, y, colours);
+        } else if (fill) {
             for (int py = 0; py < screen.height; py += Screen.TILE_SIZE) {
                 for (int px = 0; px < screen.width; px += Screen.TILE_SIZE) draw(screen, px, py);
             }

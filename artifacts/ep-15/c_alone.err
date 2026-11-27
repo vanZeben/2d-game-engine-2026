@@ -1,0 +1,2 @@
+--client needs --connect HOST:PORT
+usage: [--headless --ticks N [--seed S] [--script FILE] [--dump-dir DIR] [--scene SPEC] [--trace-input] [--trace-player [--trace-swim]]] [--server [--port P] | --client --connect HOST:PORT]

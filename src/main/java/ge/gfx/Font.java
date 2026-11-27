@@ -36,6 +36,18 @@ public final class Font {
      *                                  or an entry is below -1 or above 215 (checked even for empty text)
      */
     public static void render(Screen screen, SpriteSheet sheet, String text, int x, int y, int[] colours) {
+        render(screen, sheet, text, x, y, colours, 1);
+    }
+
+    /**
+     * Like {@link #render(Screen, SpriteSheet, String, int, int, int[])} with every glyph drawn at an integer
+     * {@code scale} (each sheet pixel a scale x scale block) and the cursor advancing {@code ADVANCE * scale} per
+     * drawn or space character. Unknown characters are still skipped. The cursor is tracked in long arithmetic,
+     * so any {@code x} (and any scale) neither throws nor wraps.
+     *
+     * @throws IllegalArgumentException as the unscaled method, or if {@code scale < 1} (even for empty text)
+     */
+    public static void render(Screen screen, SpriteSheet sheet, String text, int x, int y, int[] colours, int scale) {
         if (screen == null) throw new IllegalArgumentException("screen is null");
         if (sheet == null) throw new IllegalArgumentException("sheet is null");
         if (text == null) throw new IllegalArgumentException("text is null");
@@ -47,27 +59,40 @@ public final class Font {
                 throw new IllegalArgumentException("colour " + c + " outside -1.." + (Palette.SIZE - 1));
             }
         }
-        long cursor = x; // long: x near Integer.MAX_VALUE must not wrap
+        if (scale < 1) throw new IllegalArgumentException("scale must be at least 1, got " + scale);
+        long advance = (long) ADVANCE * scale;
+        long cursor = x; // long: x near Integer.MAX_VALUE, or a big scale, must not wrap
         for (int i = 0; i < text.length(); i++) {
             int col = column(text.charAt(i));
             if (col == UNKNOWN) continue;
-            // Only glyphs that overlap the screen are handed on, so the int narrowing below is safe.
-            if (col != SPACE && cursor > -ADVANCE && cursor < screen.width) {
-                screen.drawPaletteTile(sheet, col, row(text.charAt(i)), (int) cursor, y, colours);
+            // Only glyphs that overlap the screen are handed on; the cursor may be below the int range.
+            if (col != SPACE && cursor > -advance && cursor < screen.width) {
+                screen.drawPaletteTile(sheet, col, row(text.charAt(i)), cursor, (long) y, colours, Screen.MIRROR_NONE, scale);
             }
-            cursor += ADVANCE;
+            cursor += advance;
             if (cursor >= screen.width) return; // everything further right is off screen too
         }
     }
 
     /** Width in pixels of {@code text}: {@link #ADVANCE} per character that is not skipped (spaces count). */
     public static int width(String text) {
+        return width(text, 1);
+    }
+
+    /**
+     * {@link #width(String)} times {@code scale}.
+     *
+     * @throws IllegalArgumentException if text is null or {@code scale < 1}
+     * @throws ArithmeticException      if the width does not fit an int
+     */
+    public static int width(String text, int scale) {
         if (text == null) throw new IllegalArgumentException("text is null");
+        if (scale < 1) throw new IllegalArgumentException("scale must be at least 1, got " + scale);
         int n = 0;
         for (int i = 0; i < text.length(); i++) {
             if (column(text.charAt(i)) != UNKNOWN) n++;
         }
-        return n * ADVANCE;
+        return Math.multiplyExact(n * ADVANCE, scale);
     }
 
     private static int column(char c) {

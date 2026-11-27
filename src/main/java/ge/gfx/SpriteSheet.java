@@ -14,6 +14,9 @@ import javax.imageio.ImageIO;
  * Later episodes map those indexes through a palette when tiles are drawn.
  */
 public final class SpriteSheet {
+    /** Number of colour indexes a sheet pixel can have (0..3). */
+    public static final int COLOURS = 4;
+
     private final int width;
     private final int height;
     private final int[] pixels;

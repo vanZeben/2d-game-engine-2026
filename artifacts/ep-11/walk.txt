@@ -1,0 +1,8 @@
+6 press DOWN
+26 release DOWN
+31 press LEFT
+51 release LEFT
+56 press UP
+76 release UP
+81 press RIGHT
+101 release RIGHT

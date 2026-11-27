@@ -25,6 +25,7 @@ public final class World {
         if (player == null) throw new IllegalArgumentException("player is null");
         this.level = level;
         this.player = player;
+        player.attachLevel(level);
         entities.add(player);
     }
 
@@ -41,15 +42,17 @@ public final class World {
         return Collections.unmodifiableList(entities);
     }
 
-    /** Adds a mob (drawn after those already here). */
+    /** Adds a mob (drawn after those already here); it collides with this world's level from now on. */
     public void add(Mob mob) {
         if (mob == null) throw new IllegalArgumentException("mob is null");
-        if (!entities.contains(mob)) entities.add(mob);
+        if (entities.contains(mob)) return;
+        mob.attachLevel(level);
+        entities.add(mob);
     }
 
     /** Removes a mob; the player cannot be removed. */
     public void remove(Mob mob) {
-        if (mob != player) entities.remove(mob);
+        if (mob != player && entities.remove(mob)) mob.attachLevel(null);
     }
 
     /** One fixed step: the player reads the input, every other mob ticks on its own. */

@@ -1,0 +1,10 @@
+trace lines: 350 ticks with box overlapping stone: 0
+tick 16 x 116 y 100
+tick 60 x 116 y 100
+tick 100 x 116 y 112
+tick 200 x 84 y 112
+tick 240 x 84 y 78
+tick 312 x 116 y 110
+tick 313 x 116 y 111
+tick 314 x 116 y 112
+expected stops: right x=116 (box right 127, stone at px 128), down y=112 (box bottom 127), left x=84 (box left 88), up y=78 (box top 88)

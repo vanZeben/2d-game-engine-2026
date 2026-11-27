@@ -5,12 +5,17 @@ import ge.gfx.Palette;
 import ge.gfx.SpriteSheet;
 import ge.input.InputHandler;
 
-/** The locally controlled player: a 16x16 sprite (2x2 tiles) that walks one pixel per tick per axis. */
+/** The locally controlled player: a 16x16 sprite (2x2 tiles) that walks one pixel per tick per axis and collides with solid tiles by its feet box. */
 public final class Player extends Mob {
     /** Sprite width and height in pixels. */
     public static final int SIZE = 16;
     /** Pixels moved per tick on each held axis. */
     public static final int SPEED = 1;
+    /**
+     * The collision box ("feet box") in sprite-local pixels, inclusive on both ends: 8 wide by 6 high at the
+     * bottom of the sprite, so the head can overlap tiles behind it and the player fits a one-tile gap.
+     */
+    public static final int BOX_X0 = 4, BOX_X1 = 11, BOX_Y0 = 10, BOX_Y1 = 15;
     /** Sprite-sheet tile row of the top half of every pose; each pose is 2x2 tiles (top row here, bottom row +1). */
     private static final int SHEET_Y = 28;
     /** Sprite-sheet tile column of the left half of each pose: down, up, sideways frame 0, sideways frame 1. */
@@ -24,11 +29,31 @@ public final class Player extends Mob {
         super(x, y);
     }
 
-    /** One fixed step: moves by SPEED on each axis the input holds; opposite keys cancel; no collision yet. */
+    /** One fixed step: moves by SPEED on each axis the input holds; opposite keys cancel; solid tiles stop it (per axis). */
     public void tick(InputHandler in) {
         int dx = (in.right() ? 1 : 0) - (in.left() ? 1 : 0);
         int dy = (in.down() ? 1 : 0) - (in.up() ? 1 : 0);
         move(SPEED * dx, SPEED * dy);
+    }
+
+    @Override
+    protected int boxX0() {
+        return BOX_X0;
+    }
+
+    @Override
+    protected int boxX1() {
+        return BOX_X1;
+    }
+
+    @Override
+    protected int boxY0() {
+        return BOX_Y0;
+    }
+
+    @Override
+    protected int boxY1() {
+        return BOX_Y1;
     }
 
     @Override

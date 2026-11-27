@@ -25,6 +25,9 @@ import ge.level.Tile;
  *   <li>{@code game:gen:W,H,SEED@SPAWNX,SPAWNY} - a playable {@link World}: the generated level with the player's
  *       sprite top-left at pixel (SPAWNX,SPAWNY) (may be negative)</li>
  *   <li>{@code game:grass:W,H@SPAWNX,SPAWNY} - the same with a W x H level of all grass</li>
+ *   <li>either game: form may end with {@code :stone=TX,TY;TX,TY;...} - those tile cells are {@link Tile#STONE}
+ *       (solid, so the player cannot enter them). At least one cell; a cell outside the level is ignored; the
+ *       option may appear at most once and no other option exists.</li>
  * </ul>
  * The optional parts of tile:/fill: may come in any order, each at most once (those of text: in the order shown,
  * before the text). N is an integer >= 1: each sheet pixel is drawn as an N x N block. M is {@code x}, {@code y} or {@code xy}
@@ -61,8 +64,8 @@ public final class Scene {
     /** Integer scale (>= 1) of a tile:, fill: or text: scene; 1 for every other scene. */
     private final int scale;
 
-    /** What a {@code game:} scene builds: a level (all grass, or generated from seed) and a spawn point. */
-    private record GameSpec(boolean grass, int width, int height, long seed, int spawnX, int spawnY) {}
+    /** What a {@code game:} scene builds: a level (all grass, or generated from seed), a spawn point and cells forced to stone. */
+    private record GameSpec(boolean grass, int width, int height, long seed, int spawnX, int spawnY, int[][] stones) {}
 
     private Scene(SpriteSheet sheet, boolean fill, int tileX, int tileY, int x, int y, int[] colours, int mirror,
             String text, Level level) {
@@ -206,8 +209,9 @@ public final class Scene {
 
     /** {@code game:gen:W,H,SEED@SPAWNX,SPAWNY} or {@code game:grass:W,H@SPAWNX,SPAWNY}. */
     private static Scene parseGame(String spec) {
-        String bad = "bad --scene '" + spec + "' (expected game:gen:W,H,SEED@SPAWNX,SPAWNY or "
-                + "game:grass:W,H@SPAWNX,SPAWNY; W,H >= 1 tiles, SEED a long, SPAWNX,SPAWNY integers)";
+        String bad = "bad --scene '" + spec + "' (expected game:gen:W,H,SEED@SPAWNX,SPAWNY[:stone=TX,TY;...] or "
+                + "game:grass:W,H@SPAWNX,SPAWNY[:stone=TX,TY;...]; W,H >= 1 tiles, SEED a long, SPAWNX,SPAWNY and "
+                + "TX,TY integers)";
         String rest = spec.substring(GAME_PREFIX.length());
         int colon = rest.indexOf(':');
         if (colon < 0) throw new IllegalArgumentException(bad);
@@ -219,6 +223,15 @@ public final class Scene {
         }
         String[] halves = rest.substring(colon + 1).split("@", -1);
         if (halves.length != 2) throw new IllegalArgumentException(bad);
+        String[] afterAt = halves[1].split(":", -1); // the spawn, then options
+        halves[1] = afterAt[0];
+        int[][] stones = new int[0][];
+        for (int i = 1; i < afterAt.length; i++) {
+            if (!afterAt[i].startsWith("stone=") || i > 1) throw new IllegalArgumentException(bad);
+            String[] cells = afterAt[i].substring("stone=".length()).split(";", -1);
+            stones = new int[cells.length][];
+            for (int c = 0; c < cells.length; c++) stones[c] = ints(cells[c], bad);
+        }
         String[] g = halves[0].split(",", -1);
         if (g.length != (grass ? 2 : 3)) throw new IllegalArgumentException(bad);
         int w, h;
@@ -236,7 +249,7 @@ public final class Scene {
                     + Level.MAX_CELLS + " cells");
         }
         return new Scene(sheet(), false, 0, 0, 0, 0, null, Screen.MIRROR_NONE, null, null,
-                new GameSpec(grass, w, h, seed, spawn[0], spawn[1]));
+                new GameSpec(grass, w, h, seed, spawn[0], spawn[1], stones));
     }
 
     /** A fresh {@link World} (new level, new player at the spawn) for a {@code game:} scene; null for any other scene. */
@@ -251,6 +264,7 @@ public final class Scene {
         } else {
             l = Level.generate(game.width(), game.height(), game.seed());
         }
+        for (int[] cell : game.stones()) l.setTile(cell[0], cell[1], Tile.STONE); // outside the level: ignored
         return new World(l, new Player(game.spawnX(), game.spawnY()));
     }
 

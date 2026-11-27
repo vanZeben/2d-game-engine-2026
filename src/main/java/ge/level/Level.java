@@ -2,6 +2,13 @@ package ge.level;
 
 import ge.Screen;
 import ge.gfx.SpriteSheet;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import javax.imageio.ImageIO;
 
 /**
  * A width x height grid of {@link Tile}, row-major with cell (0,0) at the top left. Everything outside the grid
@@ -34,6 +41,13 @@ public final class Level {
 
     public int height() {
         return height;
+    }
+
+    /** An independent level with the same size and tiles. */
+    public Level copy() {
+        Level c = new Level(width, height);
+        System.arraycopy(ids, 0, c.ids, 0, ids.length);
+        return c;
     }
 
     /** The tile at cell (x, y); any cell outside the level (any int) is {@link Tile#VOID}. */
@@ -72,6 +86,47 @@ public final class Level {
                 Tile t = getTile((int) cx, (int) cy);
                 screen.drawPaletteTile(sheet, t.sheetX(), t.sheetY(), (int) (cx * size - xOffset), py, t.paletteColours());
             }
+        }
+    }
+
+    /**
+     * Loads a level from a PNG: the level is as wide and high as the image, and cell (x, y) is
+     * {@link Tile#byLevelColour(int)} of pixel (x, y) (alpha ignored, exact colour match, any unknown colour is
+     * {@link Tile#VOID}).
+     *
+     * <p>A {@code resource} starting with '/' is a classpath resource such as {@code "/levels/small_test_level.png"};
+     * if the classpath has no such resource the same text is tried as an absolute file path. Anything else is a
+     * file path (relative to the working directory, or absolute).
+     *
+     * @throws IllegalArgumentException if nothing is found there, it is not a decodable image, or it is too big
+     */
+    public static Level load(String resource) {
+        if (resource == null || resource.isEmpty()) throw new IllegalArgumentException("level resource is empty");
+        BufferedImage image;
+        try {
+            image = readImage(resource);
+        } catch (IOException | RuntimeException e) {
+            if (e instanceof IllegalArgumentException iae) throw iae;
+            throw new IllegalArgumentException("cannot read level image " + resource + ": " + e.getMessage(), e);
+        }
+        if (image == null) throw new IllegalArgumentException("not a readable image: " + resource);
+        int w = image.getWidth(), h = image.getHeight();
+        Level level = new Level(w, h); // rejects sizes over MAX_CELLS
+        int[] argb = image.getRGB(0, 0, w, h, null, 0, w);
+        for (int i = 0; i < argb.length; i++) level.ids[i] = (byte) Tile.byLevelColour(argb[i]).id();
+        return level;
+    }
+
+    private static BufferedImage readImage(String resource) throws IOException {
+        if (resource.startsWith("/")) {
+            try (InputStream in = Level.class.getResourceAsStream(resource)) {
+                if (in != null) return ImageIO.read(in);
+            }
+        }
+        Path file = Paths.get(resource);
+        if (!Files.isRegularFile(file)) throw new IllegalArgumentException("level not found: " + resource);
+        try (InputStream in = Files.newInputStream(file)) {
+            return ImageIO.read(in);
         }
     }
 

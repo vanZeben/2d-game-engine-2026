@@ -1,0 +1,28 @@
+frame size 160x120 type 5
+shift(3,5) overlap px=18055 mismatches=0
+f00 frame1==frame0: true
+same seed twice identical: true
+seed2 vs seed1 differing px=15680 of 19200
+offset 200,200 colours: 0033CC:12480 339900:5856 33CC33:288 666666:576 
+offset 1000,1000 colours: 000000:19200 
+offset -100,-100 colours: 000000:18000 0033CC:1200 
+seed1 @0,0 colours (19200 px): 0033CC:7872 339900:7015 33CC33:345 666666:3968 
+~~~~~~~~~~ggg~~~gggg
+~~~~~~~~~~ggg~~~gggg
+~~~~~~~~~ggggg~~gggg
+~~~~~~~~gggggg~ggggg
+~~~~~~~gggggggggggg#
+~~~~~~~gggggggggggg#
+~~~~~~~gggggggggggg#
+~~~~~~~~gggggggggg##
+~~~~~~~~ggggggggg###
+~~~~~~~~gggg########
+~~~~~~~~ggg#########
+~~~~~~~~ggg#########
+~~~~~~~ggg##########
+~~~~~~gggg##########
+~~~gggggg########ggg
+# commands (jar: ep-08/game.jar, built from ep-08 @ b0e5006 in a detached worktree)
+java -Djava.awt.headless=true -jar game.jar --headless --ticks 2 --dump-dir D --scene level:gen:64,64,1@0,0
+  ... same with @3,5 ; @200,200 ; seed 2 @0,0 ; @1000,1000 ; @-100,-100 ; seed 1 @0,0 again
+java -jar game.jar --headless --ticks 2 --dump-dir D --scene level:gen:0,5,1@0,0  -> exit 2, stderr "level size must be at least 1x1, got 0x5"

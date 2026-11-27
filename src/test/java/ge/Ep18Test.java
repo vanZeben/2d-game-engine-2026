@@ -324,7 +324,7 @@ public class Ep18Test {
         java.nio.file.Path dir = java.nio.file.Files.createTempDirectory("ep18-realtime");
         String javaBin = Paths.get(System.getProperty("java.home"), "bin", "java").toString();
         Process p = new ProcessBuilder(javaBin, "-Djava.awt.headless=true", "-jar", "build/game.jar", "--client", "--connect",
-                "127.0.0.1:" + server.port(), "--name", "alice", "--headless", "--realtime", "--ticks", "180", "--scene", SCENE_A,
+                "127.0.0.1:" + server.port(), "--name", "alice", "--headless", "--realtime", "--ticks", "240", "--scene", SCENE_A,
                 "--dump-dir", dir.toString()).redirectErrorStream(true).start();
         StringBuilder out = new StringBuilder();
         Thread drain = new Thread(() -> {
@@ -337,6 +337,8 @@ public class Ep18Test {
         try {
             until(() -> server.playerNames().contains("alice") || !p.isAlive(), 20000);
             assertTrue(server.playerNames().contains("alice"), "jar client never logged in: " + out);
+            // wait until alice's process is actually ticking (frame 30 dumped), else bob can log in before her first frame
+            until(() -> java.nio.file.Files.exists(dir.resolve("frame-00030.png")) || !p.isAlive(), 10000);
             Client bob = Client.connect("127.0.0.1", server.port(), "bob", 216, 208);
             toClose.add(bob);
             assertTrue(bob.awaitJoined(3000));

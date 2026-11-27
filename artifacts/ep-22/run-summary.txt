@@ -1,0 +1,8 @@
+server pid=536703 port=51066
+sam2 exit=4 elapsed_ms=255
+observer exit=0
+sam1 exit=0
+sam3 exit=0
+server killed
+--- leftover java processes:
+leftover check done

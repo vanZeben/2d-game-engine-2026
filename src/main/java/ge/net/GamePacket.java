@@ -7,7 +7,7 @@ import java.util.regex.Pattern;
 /**
  * Game packets: ASCII text, a 2-character ID, then comma-separated fields, one datagram each
  * ({@code "00,NAME,X,Y"}). IDs are digits, so they can never be read as "ping", "pong" or a {@code "GE1 "}
- * connection message. ID 02 is reserved for move (a later episode).
+ * connection message. ID 02 is a move: a player's full state, stamped with a per-sender sequence number.
  *
  * <p>{@link #parse} is the only way bytes become packets: anything malformed (null, empty, oversized, non-ASCII,
  * unknown ID, wrong field count, a non-canonical or out-of-range integer, a bad name) gives {@code Optional.empty()},
@@ -22,6 +22,7 @@ public sealed interface GamePacket {
 
     String ID_LOGIN = "00";
     String ID_DISCONNECT = "01";
+    String ID_MOVE = "02";
     String ID_PLAYER_JOINED = "03";
     String ID_PLAYER_LEFT = "04";
 
@@ -95,6 +96,33 @@ public sealed interface GamePacket {
         }
     }
 
+    /**
+     * A player's full state: position (world pixel of the sprite's top-left corner), facing ({@code dir} = the
+     * ordinal of {@code Mob.Dir}, 0..3), walk frame (0 or 1) and a sequence number. Client to server, stamped by the
+     * sender with an increasing {@code seq} (from 0); the server relays it to the other players under the sender's
+     * registered name with the sender's seq, and receivers apply only a seq higher than the last one they applied
+     * (UDP may reorder and duplicate). Wire form {@code "02,NAME,X,Y,DIR,FRAME,SEQ"}.
+     */
+    record Move(String name, int x, int y, int dir, int walkFrame, int seq) implements GamePacket {
+        public Move {
+            requireName(name);
+            if (dir < 0 || dir > 3) throw new IllegalArgumentException("bad dir: " + dir);
+            if (walkFrame < 0 || walkFrame > 1) throw new IllegalArgumentException("bad walk frame: " + walkFrame);
+            if (seq < 0) throw new IllegalArgumentException("bad seq: " + seq);
+        }
+
+        @Override
+        public String id() {
+            return ID_MOVE;
+        }
+
+        @Override
+        public byte[] toBytes() {
+            return (ID_MOVE + "," + name + "," + x + "," + y + "," + dir + "," + walkFrame + "," + seq)
+                    .getBytes(StandardCharsets.US_ASCII);
+        }
+    }
+
     /** A valid name is 1 to {@value #MAX_NAME} characters of {@code [A-Za-z0-9_]}. */
     static boolean isValidName(String name) {
         return name != null && Fields.NAME.matcher(name).matches();
@@ -124,6 +152,11 @@ public sealed interface GamePacket {
                 case ID_PLAYER_JOINED -> {
                     if (f.length != 4 || !isValidName(f[1])) return Optional.empty();
                     return Optional.of(new PlayerJoined(f[1], Fields.integer(f[2]), Fields.integer(f[3])));
+                }
+                case ID_MOVE -> {
+                    if (f.length != 7 || !isValidName(f[1])) return Optional.empty();
+                    return Optional.of(new Move(f[1], Fields.integer(f[2]), Fields.integer(f[3]), Fields.integer(f[4]),
+                            Fields.integer(f[5]), Fields.integer(f[6])));
                 }
                 case ID_DISCONNECT -> {
                     return f.length == 1 ? Optional.of(new Disconnect()) : Optional.empty();

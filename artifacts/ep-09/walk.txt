@@ -1,0 +1,9 @@
+# ep09 playtest: right 30, down 30, left+up 20, then stop
+1  press RIGHT
+31 release RIGHT
+31 press DOWN
+61 release DOWN
+61 press LEFT
+61 press UP
+81 release LEFT
+81 release UP

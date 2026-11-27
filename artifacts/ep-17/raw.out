@@ -1,0 +1,3 @@
+unjoined ping reply=NONE (timeout 1s)
+join reply=GE1 ACK (bytes=7)
+joined ping reply=pong (bytes=4)

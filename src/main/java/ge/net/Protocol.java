@@ -14,6 +14,9 @@ public final class Protocol {
     public static final String MAGIC = "GE1 ";
     public static final byte[] JOIN = (MAGIC + "JOIN").getBytes(StandardCharsets.US_ASCII);
     public static final byte[] JOIN_ACK = (MAGIC + "ACK").getBytes(StandardCharsets.US_ASCII);
+    /** Liveness probe: a joined client sends exactly these 4 bytes, the server answers exactly {@link #PONG}. */
+    public static final byte[] PING = "ping".getBytes(StandardCharsets.US_ASCII);
+    public static final byte[] PONG = "pong".getBytes(StandardCharsets.US_ASCII);
     /** Largest datagram either side reads; larger ones are truncated and then fail to parse. */
     public static final int MAX_PACKET = 1024;
 
@@ -25,5 +28,13 @@ public final class Protocol {
 
     public static boolean isJoinAck(byte[] data) {
         return Arrays.equals(data, JOIN_ACK);
+    }
+
+    public static boolean isPing(byte[] data) {
+        return Arrays.equals(data, PING);
+    }
+
+    public static boolean isPong(byte[] data) {
+        return Arrays.equals(data, PONG);
     }
 }

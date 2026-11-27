@@ -7,6 +7,8 @@ import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * The joining side. {@link #connect} returns at once; a background thread sends join requests (retransmitting,
@@ -20,6 +22,13 @@ public final class Client extends Endpoint {
     private volatile boolean joined;
     /** Counted down on join or close: wakes the join loop and any awaitJoined. */
     private final CountDownLatch wake = new CountDownLatch(1);
+
+    /** Guards {@link #pongs}; {@link #pongArrived} wakes a waiting {@link #ping}. */
+    private final ReentrantLock pongLock = new ReentrantLock();
+    private final Condition pongArrived = pongLock.newCondition();
+    private long pongs;
+    /** Serialises pings, so each waiter only ever sees the pong for its own probe. */
+    private final Object pingMutex = new Object();
 
     private Client(DatagramSocket socket, InetSocketAddress server) {
         super(socket);
@@ -49,6 +58,47 @@ public final class Client extends Endpoint {
         return isJoined();
     }
 
+    /**
+     * Sends one "ping" and blocks up to the timeout for the server's "pong". Returns false on timeout, if the
+     * client is (or gets) closed, or if the server has not acked our join; never throws. Safe from any thread
+     * except that concurrent pings run one after another.
+     */
+    public boolean ping(long timeoutMillis) {
+        synchronized (pingMutex) {
+            long remaining = TimeUnit.MILLISECONDS.toNanos(Math.max(0, timeoutMillis));
+            pongLock.lock();
+            try {
+                if (isClosed()) return false;
+                long seen = pongs; // anything counted before now is a stale answer to an earlier ping
+                try {
+                    send(server, Protocol.PING);
+                } catch (IOException e) {
+                    return false; // closed under us
+                }
+                while (pongs == seen && !isClosed()) {
+                    if (remaining <= 0) return false;
+                    remaining = pongArrived.awaitNanos(remaining);
+                }
+                return pongs != seen;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            } finally {
+                pongLock.unlock();
+            }
+        }
+    }
+
+    private void onPong() {
+        pongLock.lock();
+        try {
+            pongs++;
+            pongArrived.signalAll();
+        } finally {
+            pongLock.unlock();
+        }
+    }
+
     private void joinLoop() {
         try {
             while (!isClosed() && !isJoined()) {
@@ -70,11 +120,21 @@ public final class Client extends Endpoint {
             wake.countDown();
             return true;
         }
+        if (Protocol.isPong(data)) {
+            onPong();
+            return true;
+        }
         return false; // game packets go to the game thread
     }
 
     @Override
     protected void onClose() {
         wake.countDown(); // wake the join loop (isClosed() is already true) and any awaitJoined
+        pongLock.lock(); // wake a blocked ping, which sees isClosed() and gives up
+        try {
+            pongArrived.signalAll();
+        } finally {
+            pongLock.unlock();
+        }
     }
 }

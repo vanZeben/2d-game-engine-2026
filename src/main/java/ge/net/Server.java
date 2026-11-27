@@ -7,7 +7,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * The hosting side. Binds a UDP socket, answers join requests with an ack, and remembers who has joined.
+ * The hosting side. Binds a UDP socket, answers join requests with an ack and pings with a pong, and remembers who has joined.
  * A client that retransmits its request (UDP loses datagrams) is acked again but counted once.
  */
 public final class Server extends Endpoint {
@@ -39,15 +39,34 @@ public final class Server extends Endpoint {
 
     @Override
     protected boolean handle(SocketAddress from, byte[] data) {
-        if (!Protocol.isJoin(data)) return false;
+        if (Protocol.isJoin(data)) {
+            onJoin(from);
+            return true;
+        }
+        if (Protocol.isPing(data)) {
+            onPing(from);
+            return true;
+        }
+        return false;
+    }
+
+    private void onJoin(SocketAddress from) {
         if (clients.contains(from) || clients.size() < MAX_CLIENTS) {
             clients.add(from);
-            try {
-                send(from, Protocol.JOIN_ACK); // acked every time: the first ack may have been lost
-            } catch (IOException e) {
-                // closed while replying; the client will retransmit if it still cares
-            }
+            reply(from, Protocol.JOIN_ACK); // acked every time: the first ack may have been lost
         }
-        return true;
+    }
+
+    /** Only joined addresses are answered; a ping from anyone else is dropped and does not make them a client. */
+    private void onPing(SocketAddress from) {
+        if (clients.contains(from)) reply(from, Protocol.PONG);
+    }
+
+    private void reply(SocketAddress to, byte[] data) {
+        try {
+            send(to, data);
+        } catch (IOException e) {
+            // closed while replying; the client will retry if it still cares
+        }
     }
 }

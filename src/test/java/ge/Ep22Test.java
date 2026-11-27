@@ -112,6 +112,8 @@ public class Ep22Test {
         String login(byte[] loginBytes) throws IOException {
             send(loginBytes);
             byte[] d = recv(2000);
+            // stale roster notices (PlayerJoined) from earlier logins may precede the answer: skip only those
+            while (d != null && GamePacket.parse(d).orElse(null) instanceof GamePacket.PlayerJoined) d = recv(2000);
             return kind(d);
         }
 
@@ -200,7 +202,9 @@ public class Ep22Test {
 
         // the name frees on disconnect and the old second can now log in; the holder's PlayerLeft precedes
         first.send(new GamePacket.Disconnect());
-        assertEquals("ACK", kind(first.recv(2000)));
+        byte[] bye = first.recv(2000);
+        while (bye != null && GamePacket.parse(bye).orElse(null) instanceof GamePacket.PlayerJoined) bye = first.recv(2000); // roster resent by the repeat logins
+        assertEquals("ACK", kind(bye));
         assertTrue(until(() -> !server.playerNames().contains("sam"), 3000));
         assertEquals("ACK", second.login("sam"));
         assertEquals(1, server.playerNames().stream().filter("sam"::equals).count());

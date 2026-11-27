@@ -7,3 +7,8 @@
 - A jar client `--headless --ticks 30 --name dave` joins and exits 0. The server then lists dave, and alice sees 3 remote players.
 - As scoped, newcomers aren't told about players already there (that's ep 19). No leftover processes.
 - Files: a-alone.png, a-two-remotes.png (plus x3), output, harness.
+
+## Second pass after send-back 1 (jar only)
+- Clean build of 0ca6a76: 220 tests. A jar server, then jar client alice (`--realtime --ticks 240`, spawn 200,200), then jar client bob about 1 s later (spawn 230,215).
+- Alice's frame 0 vs frame 239: 150 px differ, all inside the expected box at screen (102..117, 67..82) and none outside. Bob appears from about frame 60 and stays.
+- Files: jar-alice-first.png, jar-alice-last.png (plus x3).

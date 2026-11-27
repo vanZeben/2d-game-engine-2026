@@ -1,6 +1,7 @@
 package ge;
 
 import ge.net.Client;
+import ge.net.ClientGame;
 import ge.net.Server;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -38,6 +39,11 @@ final class NetRoles {
      * @return the process exit status
      */
     static int serveHeadless(Game game, int port, long ticks, PrintStream out) {
+        return serveHeadless(game, port, ticks, false, out);
+    }
+
+    /** As above; with {@code realtime} a bounded run is paced at 60 ticks/s too. */
+    static int serveHeadless(Game game, int port, long ticks, boolean realtime, PrintStream out) {
         try (Server server = Server.start(port)) {
             out.println("server listening port=" + server.port());
             out.flush();
@@ -46,7 +52,7 @@ final class NetRoles {
             for (long i = 0; ticks < 0 || i < ticks; i++) {
                 server.drain(p -> { /* game packets arrive in later episodes */ });
                 game.tick();
-                if (ticks < 0) { // real time only when running until killed
+                if (ticks < 0 || realtime) { // real time when running until killed, or when asked
                     next += step;
                     long wait = next - System.nanoTime();
                     if (wait > 0) Thread.sleep(wait / 1_000_000L, (int) (wait % 1_000_000L));
@@ -76,7 +82,15 @@ final class NetRoles {
      * @return the connected client (caller closes it), or null after printing {@code client join failed ...}
      */
     static Client joinHeadless(Address to, String name, PrintStream out) throws IOException {
-        Client c = name == null ? Client.connect(to.host(), to.port()) : Client.connect(to.host(), to.port(), name);
+        return joinHeadless(to, name, null, out);
+    }
+
+    /**
+     * As above, and when {@code game} plays a world: the login carries the player's spawn position, and on success
+     * the game drains the network into its world at the start of every tick (remote players appear on screen).
+     */
+    static Client joinHeadless(Address to, String name, Game game, PrintStream out) throws IOException {
+        Client c = open(to, name, game);
         if (c.awaitJoined(JOIN_TIMEOUT_MS)) {
             out.println("client joined server=" + to.text());
             out.flush();
@@ -89,8 +103,19 @@ final class NetRoles {
     }
 
     /** Windowed client: joins in the background while the window runs; closed when the JVM exits. */
-    static void joinWindowed(Address to, String name) throws IOException {
-        Client c = name == null ? Client.connect(to.host(), to.port()) : Client.connect(to.host(), to.port(), name);
+    static void joinWindowed(Address to, String name, Game game) throws IOException {
+        Client c = open(to, name, game);
         Runtime.getRuntime().addShutdownHook(new Thread(c::close, "client-close"));
+    }
+
+    /** Connects; with a world the named login is at the player's spawn and the game drains the inbox each tick. */
+    private static Client open(Address to, String name, Game game) throws IOException {
+        World world = game == null ? null : game.world();
+        Client c;
+        if (name == null) c = Client.connect(to.host(), to.port());
+        else if (world == null) c = Client.connect(to.host(), to.port(), name);
+        else c = Client.connect(to.host(), to.port(), name, world.player().x(), world.player().y());
+        if (world != null) game.beforeTick(ClientGame.attach(world, c)::drain);
+        return c;
     }
 }

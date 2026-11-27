@@ -16,11 +16,14 @@ import java.nio.file.Paths;
  *   --script FILE    scripted key events (docs/script-format.md); a bad file exits 2 before running
  *   --trace-input    print one "tick=T up=U down=D left=L right=R" line per tick
  *   --trace-player   with a game: scene, print one "tick=T x=X y=Y camx=CX camy=CY dir=D frame=F" line per tick
+ *   --realtime       with --headless (else exit 2): pace the ticks at 60 per second instead of running as fast as possible
  *   --trace-swim     with --trace-player (else exit 2): append " swim=S" to each line (S = 1 while the player stands in water, else 0)
  *   --server [--port P]            host over UDP (P defaults to 0 = any free port); headless it prints
  *                    "server listening port=P" and runs until killed, or for exactly --ticks N ticks if given
  *   --client --connect HOST:PORT [--name NAME]   join a server (NAME: 1..16 of A-Za-z0-9_, else exit 2; without it the
- *                    join is nameless and the server picks a name; a named client logs in at position 0,0); headless it prints "client joined server=HOST:PORT" (then plays
+ *                    join is nameless and the server picks a name; a named client logs in at the player's spawn in a game: scene, else at 0,0;
+ *                    with a game: scene the client's game applies the server's players to its world every tick, so
+ *                    other players appear on its screen and in --dump-dir frames); headless it prints "client joined server=HOST:PORT" (then plays
  *                    --ticks N) or, with no ack within 3 s, "client join failed server=HOST:PORT" and exits 3
  *                    (--server and --client are exclusive; --client needs --connect)
  *   --scene game:...  a game scene may end with :stone=TX,TY;... and/or :water=TX,TY;... (each at most once, either
@@ -41,6 +44,7 @@ public class Main {
         boolean traceInput = false;
         boolean tracePlayer = false;
         boolean traceSwim = false;
+        boolean realtime = false;
         boolean serverRole = false;
         boolean clientRole = false;
         boolean ticksGiven = false;
@@ -63,6 +67,7 @@ public class Main {
                     case "--trace-input" -> traceInput = true;
                     case "--trace-player" -> tracePlayer = true;
                     case "--trace-swim" -> traceSwim = true;
+                    case "--realtime" -> realtime = true;
                     case "--server" -> serverRole = true;
                     case "--client" -> clientRole = true;
                     case "--port" -> port = Integer.parseInt(value(args, ++i));
@@ -72,6 +77,7 @@ public class Main {
                 }
             }
             if (traceSwim && !tracePlayer) throw new IllegalArgumentException("--trace-swim needs --trace-player");
+            if (realtime && !headless) throw new IllegalArgumentException("--realtime needs --headless");
             if (serverRole && clientRole) throw new IllegalArgumentException("--server and --client are exclusive");
             if (clientRole && connect == null) throw new IllegalArgumentException("--client needs --connect HOST:PORT");
             if (connect != null && !clientRole) throw new IllegalArgumentException("--connect needs --client");
@@ -90,7 +96,7 @@ public class Main {
             if (!headless && scene == null) scene = Scene.parse(DEFAULT_WINDOW_SCENE);
         } catch (IllegalArgumentException e) {
             System.err.println(e.getMessage());
-            System.err.println("usage: [--headless --ticks N [--seed S] [--script FILE] [--dump-dir DIR] [--scene SPEC] [--trace-input] [--trace-player [--trace-swim]]] [--server [--port P] | --client --connect HOST:PORT [--name NAME]]");
+            System.err.println("usage: [--headless --ticks N [--seed S] [--script FILE] [--dump-dir DIR] [--scene SPEC] [--trace-input] [--trace-player [--trace-swim]] [--realtime]] [--server [--port P] | --client --connect HOST:PORT [--name NAME]]");
             System.exit(2);
             return;
         }
@@ -105,20 +111,20 @@ public class Main {
             System.setProperty("java.awt.headless", "true");
             if (serverRole) {
                 // A server runs until killed unless --ticks is given (the default of 600 is for single-player).
-                System.exit(NetRoles.serveHeadless(game, port == null ? 0 : port, ticksGiven ? ticks : -1, System.out));
+                System.exit(NetRoles.serveHeadless(game, port == null ? 0 : port, ticksGiven ? ticks : -1, realtime, System.out));
                 return;
             }
             Client client = null;
             try {
                 if (clientRole) {
-                    client = NetRoles.joinHeadless(connect, playerName, System.out);
+                    client = NetRoles.joinHeadless(connect, playerName, game, System.out);
                     if (client == null) {
                         System.exit(NetRoles.EXIT_JOIN_FAILED);
                         return;
                     }
                 }
                 HeadlessRunner.Result r = HeadlessRunner.run(game, ticks, dumpDir, script, traceInput ? System.out : null,
-                        tracePlayer ? System.out : null, traceSwim);
+                        tracePlayer ? System.out : null, traceSwim, realtime);
                 System.out.println("ticks=" + r.ticks() + " frames=" + r.frames());
             } catch (IOException e) {
                 System.err.println("cannot join: " + e.getMessage());
@@ -136,7 +142,7 @@ public class Main {
             }
             try {
                 if (serverRole) NetRoles.serveWindowed(port == null ? 0 : port, System.out);
-                if (clientRole) NetRoles.joinWindowed(connect, playerName);
+                if (clientRole) NetRoles.joinWindowed(connect, playerName, game);
             } catch (IOException e) {
                 System.err.println("network error: " + e.getMessage());
                 System.exit(1);

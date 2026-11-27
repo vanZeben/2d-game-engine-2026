@@ -42,6 +42,14 @@ public final class ClientGame implements AutoCloseable {
         return new ClientGame(world, client, name);
     }
 
+    /**
+     * Joins the world of an already running game (the jar's {@code --client}): the caller owns the world and its
+     * tick loop and calls {@link #drain} on the game thread once per tick. The client's login is the caller's business.
+     */
+    public static ClientGame attach(World world, Client client) {
+        return new ClientGame(world, client, client.name());
+    }
+
     public World world() {
         return world;
     }
@@ -52,8 +60,13 @@ public final class ClientGame implements AutoCloseable {
 
     /** One step: apply every packet that arrived since the last tick, then tick the world with no input. */
     public void tick() {
-        client.drain(this::apply);
+        drain();
         world.tick(noInput);
+    }
+
+    /** Applies every packet that arrived since the last call to the world. Game thread only. */
+    public void drain() {
+        client.drain(this::apply);
     }
 
     private void apply(Packet p) {

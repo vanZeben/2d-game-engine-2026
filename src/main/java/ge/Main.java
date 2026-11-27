@@ -24,7 +24,8 @@ import java.nio.file.Paths;
  *                    join is nameless and the server picks a name; a named client logs in at the player's spawn in a game: scene, else at 0,0;
  *                    with a game: scene the client's game applies the server's players to its world every tick, so
  *                    other players appear on its screen and in --dump-dir frames); headless it prints "client joined server=HOST:PORT" (then plays
- *                    --ticks N) or, with no ack within 3 s, "client join failed server=HOST:PORT" and exits 3
+ *                    --ticks N) or, with no ack within 3 s, "client join failed server=HOST:PORT" and exits 3; if the server
+ *                    rejects the name as taken it prints "client login rejected name=NAME" and exits 4
  *                    (--server and --client are exclusive; --client needs --connect)
  *   --scene game:...  a game scene may end with :stone=TX,TY;... and/or :water=TX,TY;... (each at most once, either
  *                    order): those cells become stone (solid) or water (animated; the player swims in it)
@@ -119,7 +120,7 @@ public class Main {
                 if (clientRole) {
                     client = NetRoles.joinHeadless(connect, playerName, game, System.out);
                     if (client == null) {
-                        System.exit(NetRoles.EXIT_JOIN_FAILED);
+                        System.exit(NetRoles.joinFailureExit());
                         return;
                     }
                 }

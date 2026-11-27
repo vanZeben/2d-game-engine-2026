@@ -13,6 +13,7 @@ Run started 2026-11-27 00:36 EST (America/Toronto). Hard stop at 08:36 EST.
 - 01:40 ep-09 lead send-back of the test before build: it pinned down-facing sprite tiles on frames after movement (ep 11 adds facing/walk frames) and walked onto random terrain and off-level (ep 12 adds collision). The resumed test-writer hit its budget hook before applying the fix; a fresh test-writer applies it. Rule from now on: revisions always go to a fresh agent (a resumed agent's budget is already spent).
 - 01:52 ep-09 reviewer SEND BACK #1: a never-moved spawn at (0,0) on gen seed 7 stands on water (ep 14 swimming would break the exact-sprite pin) and the --trace-player check uses exact equality despite the append-only contract. Fix is test-side: a fresh test-writer amends Ep09Test; builder code unchanged unless the build then fails; a fresh reviewer re-reviews.
 - 01:57 Guard catch (rules): the ep-09 re-reviewer's jshell run created ~/.java/.userPrefs (home dir is off-limits). The reviewer reported it itself. The lead checked that everything there was created at 01:53, then removed it. The common brief now forbids jshell without a /tmp prefs root.
+- 02:25 ep-13 playtester ran over budget after finishing its checks but before committing; the lead copied the frames it had produced into artifacts/ep-13 (no new testing by the lead).
 
 ## Episodes
 - 00:41 ep-01 | attempts=1 builder (+1 test fix) | APPROVE: clean build 6/6, build.sh fails on failure, no faking | guards caught: builder refused uncompilable test (local 'java' shadowed java.util), test-writer fixed compile only
@@ -27,3 +28,4 @@ Run started 2026-11-27 00:36 EST (America/Toronto). Hard stop at 08:36 EST.
 - 02:00 ep-10 | attempts=1 | fail-before: 9298589 exit 1 (25 errors) | APPROVE: 144/144 clean, scaled blit visible-pixels only (MAX_VALUE scale) | guards caught: nothing
 - 02:06 ep-11 | attempts=1 | fail-before: 05c587f exit 1 | APPROVE: 149/149 clean, pose rules verified against sheet rows 28-29 | guards caught: nothing
 - 02:14 ep-12 | attempts=1 | fail-before: 0237cee exit 1; with only BOX_* consts 15/19 Ep12 fail | APPROVE: 168/168 clean, 1px step per axis = no tunnelling | guards caught: nothing
+- 02:20 ep-13 | attempts=1 | fail-before: d1b43ec exit 1 | APPROVE: 178/178 clean, near-miss colours -> void, non-square temp PNG | guards caught: playtester budget overrun after testing (lead copied its frames)

@@ -1,0 +1,4 @@
+pkt 1 len=8 hex=474531204a4f494e
+pkt 2 len=8 hex=474531204a4f494e
+pkt 3 len=8 hex=474531204a4f494e
+datagrams=30 span_ms=2909.086867 mean_gap_ms=100.31334024137931

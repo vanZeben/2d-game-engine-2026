@@ -1,0 +1,11 @@
+Server: java -jar game.jar --server --port 0 --headless  -> "server listening port=55831" (bound UDP, DA17)
+/proc/net/udp6 row, inode matches server fd socket:
+  00000000000000000000000000000000:DA17  state 07 (UNCONN)  inode 2889867011
+/proc/net/tcp, tcp6: no row on port DA17; no TCP row owned by server inodes.
+Server fds: 1 UDP socket + 1 unix socket (JVM-internal, unconnected). No TCP listener.
+(`ss` not installed; used /proc/net/*.)
+Client join to live server: "client joined", ticks=10 frames=10, exit 0.
+Client to dead port 127.0.0.1:1: "client join failed server=127.0.0.1:1", exit 3, returned in 3.1 s (no hang).
+Join resend cadence (UdpSink on 47123, silent): 30 datagrams over 2.9 s, mean gap 100.3 ms, payload "GE1 JOIN" (8 bytes).
+Malformed datagrams (empty, 0xff, "ZZ garbage", 1400 zero bytes) to live server: server stayed up; later client joined fine.
+Server stdout only prints the listening line; no join/leave/timeout logging observed.

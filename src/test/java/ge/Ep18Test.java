@@ -70,6 +70,11 @@ import org.junit.jupiter.api.*;
  *    void close()  closes the client.
  *  CLI: --name NAME is accepted with --client (headless prints the same "client joined server=HOST:PORT" line and
  *    logs in with that name; position 0,0). Invalid NAME: exit status 2.
+ *  --realtime (with --headless; else exit 2): paces the tick loop at 60 ticks/s instead of running as fast as
+ *    possible, so other clients can log in during a networked headless run. Changes no existing output.
+ *  A jar --client with a game: scene (headless and windowed) drives its world from the network exactly like
+ *    ClientGame.tick: each game-thread tick it drains the client inbox and adds a RemotePlayer per PlayerJoined; the
+ *    frames it dumps (--dump-dir) show those remote players.
  * All sockets are closed in finally/AfterEach; every test has @Timeout.
  */
 public class Ep18Test {
@@ -311,5 +316,55 @@ public class Ep18Test {
         } finally {
             p.destroyForcibly();
         }
+    }
+
+    @Test
+    @Timeout(90)
+    void jarClientShowsASecondPlayerInItsDumpedFrames() throws Exception {
+        java.nio.file.Path dir = java.nio.file.Files.createTempDirectory("ep18-realtime");
+        String javaBin = Paths.get(System.getProperty("java.home"), "bin", "java").toString();
+        Process p = new ProcessBuilder(javaBin, "-Djava.awt.headless=true", "-jar", "build/game.jar", "--client", "--connect",
+                "127.0.0.1:" + server.port(), "--name", "alice", "--headless", "--realtime", "--ticks", "180", "--scene", SCENE_A,
+                "--dump-dir", dir.toString()).redirectErrorStream(true).start();
+        StringBuilder out = new StringBuilder();
+        Thread drain = new Thread(() -> {
+            try {
+                out.append(new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8));
+            } catch (IOException ignored) {
+            }
+        });
+        drain.start();
+        try {
+            until(() -> server.playerNames().contains("alice") || !p.isAlive(), 20000);
+            assertTrue(server.playerNames().contains("alice"), "jar client never logged in: " + out);
+            Client bob = Client.connect("127.0.0.1", server.port(), "bob", 216, 208);
+            toClose.add(bob);
+            assertTrue(bob.awaitJoined(3000));
+            assertTrue(p.waitFor(60, TimeUnit.SECONDS), "client hung: " + out);
+            drain.join(2000);
+            assertEquals(0, p.exitValue(), out.toString());
+            java.util.List<java.nio.file.Path> frames;
+            try (var st = java.nio.file.Files.list(dir)) {
+                frames = st.filter(f -> f.getFileName().toString().matches("frame-\\d+\\.png")).sorted().toList();
+            }
+            assertFalse(frames.isEmpty(), "no frames dumped: " + out);
+            Screen first = fromPng(frames.get(0));
+            Screen last = fromPng(frames.get(frames.size() - 1));
+            Screen model = new Screen(Game.WIDTH, Game.HEIGHT);
+            model.clear(0);
+            Scene.parse(SCENE_B).newWorld().render(model, Scene.sheet()); // never-moved sprite, centred at (72, 52)
+            int[] want = box(model, 72, 52);
+            assertArrayEquals(want, box(last, 88, 60), "bob's sprite must be in the last frame at screen (88,60)");
+            assertFalse(Arrays.equals(want, box(first, 88, 60)), "bob must not be in the first frame");
+        } finally {
+            p.destroyForcibly();
+        }
+    }
+
+    private static Screen fromPng(java.nio.file.Path f) throws IOException {
+        java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(f.toFile());
+        Screen s = new Screen(img.getWidth(), img.getHeight());
+        for (int y = 0; y < img.getHeight(); y++) for (int x = 0; x < img.getWidth(); x++) s.pixels[y * s.width + x] = img.getRGB(x, y) & 0xFFFFFF;
+        return s;
     }
 }

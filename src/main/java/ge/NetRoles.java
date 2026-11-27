@@ -72,11 +72,11 @@ final class NetRoles {
     }
 
     /**
-     * Headless client: connects and waits for the ack.
+     * Headless client: connects (logging in as {@code name} at 0,0, or nameless if null) and waits for the ack.
      * @return the connected client (caller closes it), or null after printing {@code client join failed ...}
      */
-    static Client joinHeadless(Address to, PrintStream out) throws IOException {
-        Client c = Client.connect(to.host(), to.port());
+    static Client joinHeadless(Address to, String name, PrintStream out) throws IOException {
+        Client c = name == null ? Client.connect(to.host(), to.port()) : Client.connect(to.host(), to.port(), name);
         if (c.awaitJoined(JOIN_TIMEOUT_MS)) {
             out.println("client joined server=" + to.text());
             out.flush();
@@ -89,8 +89,8 @@ final class NetRoles {
     }
 
     /** Windowed client: joins in the background while the window runs; closed when the JVM exits. */
-    static void joinWindowed(Address to) throws IOException {
-        Client c = Client.connect(to.host(), to.port());
+    static void joinWindowed(Address to, String name) throws IOException {
+        Client c = name == null ? Client.connect(to.host(), to.port()) : Client.connect(to.host(), to.port(), name);
         Runtime.getRuntime().addShutdownHook(new Thread(c::close, "client-close"));
     }
 }

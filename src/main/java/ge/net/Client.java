@@ -11,14 +11,18 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * The joining side. {@link #connect} returns at once; a background thread sends join requests (retransmitting,
- * since UDP is lossy) until the server's ack arrives or the client is closed.
+ * The joining side. {@link #connect} returns at once; a background thread sends the login (a named
+ * {@link GamePacket.Login}, or the bare nameless {@link Protocol#JOIN}), retransmitting since UDP is lossy, until the
+ * server's ack arrives or the client is closed. Packets that are not connection-level go to the inbox for the game thread.
  */
 public final class Client extends Endpoint {
     /** Pause between join requests while waiting for the ack. */
     static final long RETRANSMIT_MS = 100;
 
     private final InetSocketAddress server;
+    /** What the join loop repeats until acked: a login packet, or the bare nameless join. */
+    private final byte[] loginBytes;
+    private final String name;
     private volatile boolean joined;
     /** Counted down on join or close: wakes the join loop and any awaitJoined. */
     private final CountDownLatch wake = new CountDownLatch(1);
@@ -30,18 +34,42 @@ public final class Client extends Endpoint {
     /** Serialises pings, so each waiter only ever sees the pong for its own probe. */
     private final Object pingMutex = new Object();
 
-    private Client(DatagramSocket socket, InetSocketAddress server) {
+    private Client(DatagramSocket socket, InetSocketAddress server, String name, byte[] loginBytes) {
         super(socket);
         this.server = server;
+        this.name = name;
+        this.loginBytes = loginBytes;
     }
 
     /** @throws IOException if the host name cannot be resolved or no local socket can be opened; never because nobody listens */
     public static Client connect(String host, int port) throws IOException {
+        return open(host, port, null, Protocol.JOIN);
+    }
+
+    /** Named login with spawn position (0, 0). @throws IllegalArgumentException if the name is not a valid {@link GamePacket.Login} name */
+    public static Client connect(String host, int port, String name) throws IOException {
+        return connect(host, port, name, 0, 0);
+    }
+
+    /**
+     * Named login: repeats {@link GamePacket.Login}(name, x, y) until acked. (x, y) is the spawn, in world pixels.
+     * @throws IllegalArgumentException if the name is not valid (checked before any socket is opened)
+     */
+    public static Client connect(String host, int port, String name, int x, int y) throws IOException {
+        return open(host, port, name, new GamePacket.Login(name, x, y).toBytes());
+    }
+
+    private static Client open(String host, int port, String name, byte[] loginBytes) throws IOException {
         InetSocketAddress addr = new InetSocketAddress(InetAddress.getByName(host), port);
-        Client c = new Client(new DatagramSocket(), addr);
+        Client c = new Client(new DatagramSocket(), addr, name, loginBytes);
         c.startReceiving("client");
         c.startThread("client-join", c::joinLoop);
         return c;
+    }
+
+    /** The name this client logged in with, or null for a nameless join. */
+    public String name() {
+        return name;
     }
 
     public boolean isJoined() {
@@ -102,7 +130,7 @@ public final class Client extends Endpoint {
     private void joinLoop() {
         try {
             while (!isClosed() && !isJoined()) {
-                send(server, Protocol.JOIN);
+                send(server, loginBytes);
                 wake.await(RETRANSMIT_MS, TimeUnit.MILLISECONDS);
             }
         } catch (IOException e) {

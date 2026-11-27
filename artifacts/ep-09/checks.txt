@@ -1,0 +1,28 @@
+frame size 160x120, frames=100
+trace checks: 100 ticks, problems=0
+tick1 x=201 y=200; tick30 x=230 y=200; tick60 x=230 y=230; tick80 x=210 y=210; tick100 x=210 y=210
+box colours frame0: 4 distinct
+frame 0 box colours: 666666 ffffff ffcc99 333399 
+frame 50 box colours: 666666 ffffff ffcc99 333399 
+frame 99 box colours: 666666 ffffff ffcc99 333399 
+scroll: pixels equal to previous frame shifted by camera delta: 1481152/1481152 (100.00%); unshifted: 1391202/1481152 (93.93%)
+pair 0->1 delta=(1,0): 18808/18808 match
+pair 40->41 delta=(0,1): 18768/18768 match
+pair 70->71 delta=(-1,-1): 18634/18634 match
+frame0 distinct colours: 7
+  339900 10412
+  666666 6766
+  0033cc 1352
+  33cc33 520
+  333399 105
+  ffcc99 31
+pair 0->1 (delta 1,0): 1356 pixels change; of those, 1356 equal previous frame shifted by delta
+pair 40->41 (delta 0,1): 1030 pixels change; of those, 1030 equal previous frame shifted by delta
+pair 70->71 (delta -1,-1): 1320 pixels change; of those, 1275 equal previous frame shifted by delta
+frame 0: box opaque-sprite=150, 666666=106, other=0
+frame 1: box opaque-sprite=150, 666666=106, other=0
+frame 30: box opaque-sprite=150, 666666=63, other=43
+frame 50: box opaque-sprite=150, 666666=106, other=0
+frame 80: box opaque-sprite=150, 666666=106, other=0
+frame 99: box opaque-sprite=150, 666666=106, other=0
+frame0 666666 total 6766

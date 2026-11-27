@@ -2,8 +2,10 @@ package ge;
 
 import ge.gfx.Font;
 import ge.gfx.Palette;
+import ge.entity.Player;
 import ge.gfx.SpriteSheet;
 import ge.level.Level;
+import ge.level.Tile;
 
 /**
  * A fixed test scene for headless runs, chosen with {@code --scene}. Every frame is the whole screen
@@ -20,6 +22,9 @@ import ge.level.Level;
  *       text is white ink on a transparent background.</li>
  *   <li>{@code level:gen:W,H,SEED@XOFF,YOFF} - {@link Level#generate(int, int, long)} (W,H >= 1 tiles, SEED a
  *       long) drawn with the view scrolled to pixel offset (XOFF,YOFF) (may be negative)</li>
+ *   <li>{@code game:gen:W,H,SEED@SPAWNX,SPAWNY} - a playable {@link World}: the generated level with the player's
+ *       sprite top-left at pixel (SPAWNX,SPAWNY) (may be negative)</li>
+ *   <li>{@code game:grass:W,H@SPAWNX,SPAWNY} - the same with a W x H level of all grass</li>
  * </ul>
  * The optional parts may come in either order, each at most once. M is {@code x}, {@code y} or {@code xy}
  * (flip each 8x8 block in place on X, on Y, or both).
@@ -32,6 +37,7 @@ public final class Scene {
 
     private static final String TEXT_PREFIX = "text:";
     private static final String LEVEL_PREFIX = "level:";
+    private static final String GAME_PREFIX = "game:";
     /** Default text colours: white ink (slot 3) over a transparent background. */
     private static final int[] TEXT_COLOURS = {Palette.TRANSPARENT, Palette.TRANSPARENT, Palette.TRANSPARENT,
         Palette.index(5, 5, 5)};
@@ -49,9 +55,19 @@ public final class Scene {
     private final Level level;
     /** Palette indexes / TRANSPARENT, or null for the interim grey. */
     private final int[] colours;
+    /** The recipe of a {@code game:} scene, or null. */
+    private final GameSpec game;
+
+    /** What a {@code game:} scene builds: a level (all grass, or generated from seed) and a spawn point. */
+    private record GameSpec(boolean grass, int width, int height, long seed, int spawnX, int spawnY) {}
 
     private Scene(SpriteSheet sheet, boolean fill, int tileX, int tileY, int x, int y, int[] colours, int mirror,
             String text, Level level) {
+        this(sheet, fill, tileX, tileY, x, y, colours, mirror, text, level, null);
+    }
+
+    private Scene(SpriteSheet sheet, boolean fill, int tileX, int tileY, int x, int y, int[] colours, int mirror,
+            String text, Level level, GameSpec game) {
         this.sheet = sheet;
         this.fill = fill;
         this.tileX = tileX;
@@ -62,10 +78,11 @@ public final class Scene {
         this.mirror = mirror;
         this.text = text;
         this.level = level;
+        this.game = game;
     }
 
     /** The sprite sheet is decoded once and shared by every scene in the process. */
-    private static synchronized SpriteSheet sheet() {
+    static synchronized SpriteSheet sheet() {
         if (sharedSheet == null) sharedSheet = SpriteSheet.load(PATH);
         return sharedSheet;
     }
@@ -74,6 +91,7 @@ public final class Scene {
     public static Scene parse(String spec) {
         if (spec.startsWith(TEXT_PREFIX)) return parseText(spec);
         if (spec.startsWith(LEVEL_PREFIX)) return parseLevel(spec);
+        if (spec.startsWith(GAME_PREFIX)) return parseGame(spec);
         String bad = "bad --scene '" + spec + "' (expected tile:TX,TY@PX,PY[:colours=C0,C1,C2,C3][:mirror=M] "
                 + "or fill:TX,TY[:colours=C0,C1,C2,C3][:mirror=M]; Ci = three digits 0..5 or t; M = x, y or xy)";
         String[] parts = spec.split(":", -1);
@@ -165,6 +183,56 @@ public final class Scene {
         return new Scene(sheet(), false, 0, 0, off[0], off[1], null, Screen.MIRROR_NONE, null, level);
     }
 
+    /** {@code game:gen:W,H,SEED@SPAWNX,SPAWNY} or {@code game:grass:W,H@SPAWNX,SPAWNY}. */
+    private static Scene parseGame(String spec) {
+        String bad = "bad --scene '" + spec + "' (expected game:gen:W,H,SEED@SPAWNX,SPAWNY or "
+                + "game:grass:W,H@SPAWNX,SPAWNY; W,H >= 1 tiles, SEED a long, SPAWNX,SPAWNY integers)";
+        String rest = spec.substring(GAME_PREFIX.length());
+        int colon = rest.indexOf(':');
+        if (colon < 0) throw new IllegalArgumentException(bad);
+        boolean grass;
+        switch (rest.substring(0, colon)) {
+            case "gen" -> grass = false;
+            case "grass" -> grass = true;
+            default -> throw new IllegalArgumentException(bad);
+        }
+        String[] halves = rest.substring(colon + 1).split("@", -1);
+        if (halves.length != 2) throw new IllegalArgumentException(bad);
+        String[] g = halves[0].split(",", -1);
+        if (g.length != (grass ? 2 : 3)) throw new IllegalArgumentException(bad);
+        int w, h;
+        long seed = 0;
+        try {
+            w = Integer.parseInt(g[0].trim());
+            h = Integer.parseInt(g[1].trim());
+            if (!grass) seed = Long.parseLong(g[2].trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(bad);
+        }
+        int[] spawn = ints(halves[1], bad);
+        if (w < 1 || h < 1 || (long) w * h > Level.MAX_CELLS) {
+            throw new IllegalArgumentException("bad --scene '" + spec + "': level size must be at least 1x1 and at most "
+                    + Level.MAX_CELLS + " cells");
+        }
+        return new Scene(sheet(), false, 0, 0, 0, 0, null, Screen.MIRROR_NONE, null, null,
+                new GameSpec(grass, w, h, seed, spawn[0], spawn[1]));
+    }
+
+    /** A fresh {@link World} (new level, new player at the spawn) for a {@code game:} scene; null for any other scene. */
+    public World newWorld() {
+        if (game == null) return null;
+        Level l;
+        if (game.grass()) {
+            l = new Level(game.width(), game.height());
+            for (int ty = 0; ty < game.height(); ty++) {
+                for (int tx = 0; tx < game.width(); tx++) l.setTile(tx, ty, Tile.GRASS);
+            }
+        } else {
+            l = Level.generate(game.width(), game.height(), game.seed());
+        }
+        return new World(l, new Player(game.spawnX(), game.spawnY()));
+    }
+
     private static int[] ints(String pair, String error) {
         String[] parts = pair.split(",", -1);
         if (parts.length != 2) throw new IllegalArgumentException(error);
@@ -210,7 +278,9 @@ public final class Scene {
 
     public void render(Screen screen) {
         screen.clear(0x000000);
-        if (level != null) {
+        if (game != null) {
+            newWorld().render(screen, sheet); // a still of the spawn; Game renders its own live world instead
+        } else if (level != null) {
             level.render(screen, sheet, x, y);
         } else if (text != null) {
             Font.render(screen, sheet, text, x, y, colours);

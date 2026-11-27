@@ -1,0 +1,13 @@
+tick=1 x=181 y=180 camx=109 camy=128 dir=right frame=0
+tick=30 x=210 y=180 camx=138 camy=128 dir=right frame=1
+tick=60 x=240 y=180 camx=168 camy=128 dir=right frame=1
+tick=61 x=240 y=181 camx=168 camy=129 dir=down frame=1
+tick=90 x=240 y=210 camx=168 camy=158 dir=down frame=1
+tick=100 x=240 y=220 camx=168 camy=168 dir=down frame=0
+tick=101 x=239 y=220 camx=167 camy=168 dir=left frame=0
+tick=120 x=220 y=220 camx=148 camy=168 dir=left frame=0
+tick=131 x=210 y=220 camx=138 camy=168 dir=left frame=0
+tick=150 x=210 y=220 camx=138 camy=168 dir=left frame=0
+tick=180 x=210 y=220 camx=138 camy=168 dir=left frame=0
+tick=210 x=210 y=220 camx=138 camy=168 dir=left frame=0
+tick=240 x=210 y=220 camx=138 camy=168 dir=left frame=0

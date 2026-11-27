@@ -157,6 +157,17 @@ public abstract class Mob {
         this.y = y;
     }
 
+    /**
+     * Sets the facing and walk frame directly (0 or 1), with no movement and no change to the moving-tick counter. For
+     * mobs whose pose is authoritative elsewhere (remote players, from the sender's newest move).
+     */
+    protected final void setPose(Dir dir, int walkFrame) {
+        if (dir == null) throw new IllegalArgumentException("dir");
+        if (walkFrame < 0 || walkFrame > 1) throw new IllegalArgumentException("bad walk frame: " + walkFrame);
+        this.dir = dir;
+        this.walkFrame = walkFrame;
+    }
+
     /** Advances this mob one fixed step without local input (mobs driven from outside override it). Default: nothing. */
     public void tick() {}
 

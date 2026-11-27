@@ -28,7 +28,7 @@ public final class RemotePlayer extends Mob {
 
     /**
      * Newest-seq-wins: puts the player at (x, y), with no collision check, if {@code seq} is strictly higher than the
-     * last applied one; otherwise (stale, duplicate) changes nothing. Facing and walk frame are not shown yet.
+     * last applied one; otherwise (stale, duplicate) changes nothing. Facing and walk frame are left as they are.
      * @return whether the move was applied
      */
     public boolean applyMove(int x, int y, int seq) {
@@ -36,6 +36,26 @@ public final class RemotePlayer extends Mob {
         lastSeq = seq;
         setPosition(x, y);
         return true;
+    }
+
+    /**
+     * As {@link #applyMove(int, int, int)}, and the pose follows the same newest move: {@code dir} is a
+     * {@link Mob.Dir} ordinal, {@code walkFrame} 0 or 1 (both validated by {@link GamePacket.Move}).
+     */
+    public boolean applyMove(int x, int y, int dir, int walkFrame, int seq) {
+        if (!applyMove(x, y, seq)) return false;
+        setPose(Dir.values()[dir], walkFrame);
+        return true;
+    }
+
+    /**
+     * The server announced this player (again) at (x, y): forget the old sequence numbers, because a fresh login
+     * restarts the sender's seq at 0 and a remote that missed the PlayerLeft in between would otherwise ignore every
+     * move of the new session as stale. Position is taken from the notice; the pose stays until the next move.
+     */
+    public void reset(int x, int y) {
+        lastSeq = -1;
+        setPosition(x, y);
     }
 
     @Override

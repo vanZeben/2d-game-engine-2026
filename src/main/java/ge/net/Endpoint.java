@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 /**
@@ -30,6 +31,7 @@ abstract class Endpoint implements AutoCloseable {
     protected final DatagramSocket socket;
     private final BlockingQueue<Packet> inbox = new LinkedBlockingQueue<>(INBOX_CAPACITY);
     private final AtomicBoolean closed = new AtomicBoolean();
+    private final AtomicInteger errors = new AtomicInteger();
     private final List<Thread> threads = new ArrayList<>();
 
     Endpoint(DatagramSocket socket) {
@@ -66,8 +68,8 @@ abstract class Endpoint implements AutoCloseable {
             byte[] data = java.util.Arrays.copyOfRange(buf, dp.getOffset(), dp.getOffset() + dp.getLength());
             try {
                 if (!handle(dp.getSocketAddress(), data)) inbox.offer(new Packet(dp.getSocketAddress(), data));
-            } catch (RuntimeException e) {
-                // a bad packet is dropped, never fatal
+            } catch (Throwable e) {
+                errors.incrementAndGet(); // a bad packet (or bug) is counted and dropped; the loop survives it
             }
         }
     }
@@ -92,6 +94,16 @@ abstract class Endpoint implements AutoCloseable {
     /** Sends one datagram. Safe from any thread. Fails with an IOException once closed. */
     protected final void send(SocketAddress to, byte[] data) throws IOException {
         socket.send(new DatagramPacket(data, data.length, to));
+    }
+
+    /** How many Throwables the endpoint's own threads caught and survived; 0 in a healthy run. Safe from any thread. */
+    public final int errorCount() {
+        return errors.get();
+    }
+
+    /** For subclass threads: counts a Throwable that was caught so the thread could carry on. */
+    protected final void countError() {
+        errors.incrementAndGet();
     }
 
     public final boolean isClosed() {

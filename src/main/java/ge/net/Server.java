@@ -9,6 +9,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /**
  * The hosting side. Binds a UDP socket and keeps a registry of logged-in players. A login is either the named
@@ -16,13 +18,23 @@ import java.util.Set;
  * acked with {@link Protocol#JOIN_ACK}, every time, since the first ack may have been lost. A client that repeats its
  * login is acked again but counted once. Pings are answered for any logged-in address. A {@link GamePacket.Disconnect} removes the player (see {@link #onDisconnect}).
  *
- * <p>Threading: the registry is only changed by the receive thread (login is handled in {@link #handle}), but other
- * threads read it ({@link #playerNames()}, {@link #clientCount()}), so every access goes through one lock and
- * readers get copies. Sends happen outside the lock.
+ * <p>Silence timeout: any valid packet from a registered address refreshes its timer; a player silent for more than
+ * {@link #TIMEOUT_NANOS} is removed exactly as if it had disconnected (the others get a {@link GamePacket.PlayerLeft},
+ * the name is free again) by a timer thread that sweeps every {@link #SWEEP_MS}.
+ *
+ * <p>Threading: the registry is changed by two threads, the receive thread (login, move, disconnect) and the timeout
+ * timer, and read by others ({@link #playerNames()}, {@link #clientCount()}, {@link #lastPosition}). Every access
+ * goes through the one {@link #lock} and readers get copies, so there is no unlocked view of the map. Sends happen
+ * outside the lock. A Throwable on either thread is counted ({@link #errorCount()}) and survived.
  */
 public final class Server extends Endpoint {
     /** Upper bound on remembered clients; logins beyond it are ignored. */
     public static final int MAX_CLIENTS = 256;
+
+    /** A player silent for longer than this is removed (docs/net.md). */
+    static final long TIMEOUT_NANOS = 10_000_000_000L;
+    /** How often the timer thread looks for silent players. */
+    static final long SWEEP_MS = 250;
 
     /** Prefix of the names the server gives to nameless clients. */
     private static final String GENERATED_PREFIX = "guest";
@@ -31,9 +43,17 @@ public final class Server extends Endpoint {
      * A logged-in address. {@code named} is false for nameless clients (generated name): nobody is told about them.
      * (x, y, dir, frame) is the player's latest known state: the spawn position from the login (0, 0 for a nameless
      * client, never sent), then whatever its newest accepted {@link GamePacket.Move} said; {@code seq} is that move's
-     * sequence number, -1 until one arrives (a fresh login makes a fresh entry, so it resets).
+     * sequence number, -1 until one arrives (a fresh login makes a fresh entry, so it resets). {@code seen} is the
+     * {@link System#nanoTime} of the last valid packet from this address.
      */
-    private record Entry(String name, boolean named, int x, int y, int dir, int frame, int seq) {}
+    private record Entry(String name, boolean named, int x, int y, int dir, int frame, int seq, long seen) {
+        Entry touched(long now) {
+            return new Entry(name, named, x, y, dir, frame, seq, now);
+        }
+    }
+
+    /** Counted down on close: wakes the timer thread. */
+    private final CountDownLatch stopTimer = new CountDownLatch(1);
 
     private final Object lock = new Object();
     /** Logged-in players by address, in login order. Guarded by {@link #lock}. */
@@ -49,6 +69,7 @@ public final class Server extends Endpoint {
     public static Server start(int port) throws IOException {
         Server s = new Server(new DatagramSocket(port));
         s.startReceiving("server");
+        s.startThread("server-timeout", s::timeoutLoop);
         return s;
     }
 
@@ -70,6 +91,56 @@ public final class Server extends Endpoint {
             Set<String> names = new LinkedHashSet<>();
             for (Entry e : players.values()) names.add(e.name());
             return names;
+        }
+    }
+
+    /** {x, y} of the named player's newest accepted move (its login position before any), or null if not registered. */
+    public int[] lastPosition(String name) {
+        synchronized (lock) {
+            for (Entry e : players.values()) {
+                if (e.name().equals(name)) return new int[] {e.x(), e.y()};
+            }
+            return null;
+        }
+    }
+
+    @Override
+    protected void onClose() {
+        stopTimer.countDown();
+    }
+
+    private void timeoutLoop() {
+        try {
+            while (!stopTimer.await(SWEEP_MS, TimeUnit.MILLISECONDS)) {
+                try {
+                    removeSilent(System.nanoTime());
+                } catch (Throwable t) {
+                    countError(); // the sweep must survive anything
+                }
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /** Removes every player silent for more than the timeout, as a disconnect would, and tells the others. */
+    void removeSilent(long now) {
+        List<Entry> gone = new ArrayList<>();
+        List<SocketAddress> remaining;
+        synchronized (lock) {
+            var it = players.values().iterator();
+            while (it.hasNext()) {
+                Entry e = it.next();
+                if (now - e.seen() > TIMEOUT_NANOS) {
+                    it.remove();
+                    if (e.named()) gone.add(e);
+                }
+            }
+            remaining = new ArrayList<>(players.keySet());
+        }
+        for (Entry e : gone) {
+            byte[] notice = new GamePacket.PlayerLeft(e.name()).toBytes();
+            for (SocketAddress other : remaining) reply(other, notice);
         }
     }
 
@@ -137,15 +208,18 @@ public final class Server extends Endpoint {
         boolean taken = false;
         synchronized (lock) {
             Entry self = players.get(from);
-            if (self == null) {
+            if (self != null) {
+                self = self.touched(System.nanoTime()); // a repeated login is a valid packet: it refreshes the timer
+                players.put(from, self);
+            } else {
                 if (players.size() >= MAX_CLIENTS) return;
                 if (name != null && isNameHeld(name)) {
                     taken = true; // nothing is registered and nobody is told
                 } else if (name == null) {
-                    players.put(from, new Entry(generateName(), false, 0, 0, 0, 0, -1));
+                    players.put(from, new Entry(generateName(), false, 0, 0, 0, 0, -1, System.nanoTime()));
                 } else {
                     others = new ArrayList<>(players.keySet());
-                    self = new Entry(name, true, x, y, 0, 0, -1);
+                    self = new Entry(name, true, x, y, 0, 0, -1, System.nanoTime());
                     players.put(from, self);
                 }
             }
@@ -184,8 +258,13 @@ public final class Server extends Endpoint {
         byte[] relay;
         synchronized (lock) {
             Entry e = players.get(from);
-            if (e == null || !e.named() || move.seq() <= e.seq()) return;
-            players.put(from, new Entry(e.name(), true, move.x(), move.y(), move.dir(), move.walkFrame(), move.seq()));
+            if (e == null) return;
+            long now = System.nanoTime();
+            if (!e.named() || move.seq() <= e.seq()) { // dropped, but still proof the client is alive
+                players.put(from, e.touched(now));
+                return;
+            }
+            players.put(from, new Entry(e.name(), true, move.x(), move.y(), move.dir(), move.walkFrame(), move.seq(), now));
             others = new ArrayList<>(players.keySet());
             others.remove(from);
             relay = new GamePacket.Move(e.name(), move.x(), move.y(), move.dir(), move.walkFrame(), move.seq()).toBytes();
@@ -215,7 +294,9 @@ public final class Server extends Endpoint {
     private void onPing(SocketAddress from) {
         boolean known;
         synchronized (lock) {
-            known = players.containsKey(from);
+            Entry e = players.get(from);
+            known = e != null;
+            if (known) players.put(from, e.touched(System.nanoTime()));
         }
         if (known) reply(from, Protocol.PONG);
     }

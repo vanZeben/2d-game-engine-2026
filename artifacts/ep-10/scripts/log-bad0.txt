@@ -1,0 +1,2 @@
+bad --scene 'tile:2,0@0,0:colours=010,130,141,351:scale=0' (expected tile:TX,TY@PX,PY[:colours=C0,C1,C2,C3][:mirror=M] or fill:TX,TY[:colours=C0,C1,C2,C3][:mirror=M][:scale=N]; Ci = three digits 0..5 or t; M = x, y or xy; N an integer >= 1; each option at most once)
+usage: [--headless --ticks N [--seed S] [--script FILE] [--dump-dir DIR] [--scene SPEC] [--trace-input] [--trace-player]]

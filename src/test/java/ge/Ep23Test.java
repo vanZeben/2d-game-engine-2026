@@ -280,10 +280,10 @@ public class Ep23Test {
         final Process p;
         final StringBuilder out = new StringBuilder(), err = new StringBuilder();
 
-        Jar(int port, String name, String scene, Path script) throws IOException {
+        Jar(int port, String name, String scene, Path script, int ticks) throws IOException {
             String javaBin = Paths.get(System.getProperty("java.home"), "bin", "java").toString();
             p = new ProcessBuilder(javaBin, "-Djava.awt.headless=true", "-jar", "build/game.jar", "--client", "--connect",
-                    "127.0.0.1:" + port, "--name", name, "--headless", "--realtime", "--ticks", "3600", "--scene", scene,
+                    "127.0.0.1:" + port, "--name", name, "--headless", "--realtime", "--ticks", String.valueOf(ticks), "--scene", scene,
                     "--script", script.toString()).start();
             drain(p.getInputStream(), out);
             drain(p.getErrorStream(), err);
@@ -317,7 +317,7 @@ public class Ep23Test {
                 for (Ev e : walk(2300 + i)) sb.append(e.tick()).append(e.press() ? " press " : " release ").append(KEY_NAMES[e.key()]).append('\n');
                 Path script = tmp.resolve(names[i] + ".txt");
                 Files.writeString(script, sb.toString());
-                jars.add(new Jar(server.port(), names[i], scenes[i], script));
+                jars.add(new Jar(server.port(), names[i], scenes[i], script, i == 0 ? 3900 : 3600));
             }
             long wait = System.nanoTime() + 40_000_000_000L;
             while (server.playerNames().size() < 3 && System.nanoTime() < wait) Thread.sleep(20);
@@ -373,11 +373,12 @@ public class Ep23Test {
             }
             assertTrue(termGone >= 0 && killGone >= 0 && killSprite >= 0);
             assertTrue(killGone - kill > 10_000_000_000L, "a crashed client is only removed by the 10 s timeout");
-            assertTrue(j1.waitFor(30, TimeUnit.SECONDS), "j1 must finish its 3600 ticks");
+            // keep i1 heartbeating while waiting, or the server rightly times it out under load
+            assertTrue(tickUntil(() -> !j1.isAlive(), 40000, i1), "j1 must finish its ticks");
             assertEquals(0, j1.exitValue(), jars.get(0).out + "" + jars.get(0).err);
-            assertTrue(j2.waitFor(10, TimeUnit.SECONDS), "SIGTERMed j2 must exit");
-            assertTrue(j3.waitFor(10, TimeUnit.SECONDS));
-            Thread.sleep(300);
+            assertTrue(tickUntil(() -> !j2.isAlive(), 10000, i1), "SIGTERMed j2 must exit");
+            assertTrue(tickUntil(() -> !j3.isAlive(), 10000, i1));
+            tickUntil(() -> false, 300, i1);
             for (int i = 0; i < 3; i++)
                 synchronized (jars.get(i).err) {
                     assertFalse(jars.get(i).err.toString().contains("Exception"), names[i] + " stderr: " + jars.get(i).err);

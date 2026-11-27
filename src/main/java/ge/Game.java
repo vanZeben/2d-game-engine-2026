@@ -17,6 +17,8 @@ public class Game {
     private final Scene scene;
     private final InputHandler input = new InputHandler();
     private final Random random;
+    /** The playable world of a {@code game:} scene, else null. */
+    private final World world;
     private long tickCount;
 
     public Game() {
@@ -32,6 +34,12 @@ public class Game {
     public Game(Scene scene, long seed) {
         this.scene = scene;
         this.random = new Random(seed);
+        this.world = scene == null ? null : scene.newWorld();
+    }
+
+    /** The world being played (a {@code game:} scene), or null when the scene is not a game. */
+    public World world() {
+        return world;
     }
 
     /** The one input source the game reads: the window's key listener and the script player both feed it. */
@@ -47,10 +55,16 @@ public class Game {
     /** Advances the simulation by one fixed step. */
     public void tick() {
         tickCount++;
+        if (world != null) world.tick(input);
     }
 
     /** Draws the current state into the screen buffer. */
     public void render(Screen screen) {
+        if (world != null) {
+            screen.clear(0x000000);
+            world.render(screen, Scene.sheet());
+            return;
+        }
         if (scene != null) {
             scene.render(screen);
             return;

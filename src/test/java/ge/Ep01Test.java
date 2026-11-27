@@ -51,8 +51,8 @@ public class Ep01Test {
 
     private static Run runJar(String... args) throws Exception {
         assertTrue(Files.exists(JAR), "build/game.jar must exist");
-        String java = Paths.get(System.getProperty("java.home"), "bin", "java").toString();
-        var cmd = new java.util.ArrayList<String>(java.util.List.of(java, "-Djava.awt.headless=true", "-jar", JAR.toString()));
+        String javaBin = Paths.get(System.getProperty("java.home"), "bin", "java").toString();
+        var cmd = new java.util.ArrayList<String>(java.util.List.of(javaBin, "-Djava.awt.headless=true", "-jar", JAR.toString()));
         cmd.addAll(java.util.List.of(args));
         Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
         byte[] out = p.getInputStream().readAllBytes();

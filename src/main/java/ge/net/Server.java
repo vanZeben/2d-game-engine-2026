@@ -126,17 +126,22 @@ public final class Server extends Endpoint {
      * {@link GamePacket.PlayerJoined} each, at that player's current position: the login position until it moves). {@code name} is null for the nameless
      * form, which is never announced to anyone and is told nothing. A repeated login registers nobody and announces
      * nothing to the others, but the roster is sent to the repeater again: its first copy may have been lost, and
-     * the client ignores names it already shows. Two players may still share a chosen name until a later episode
-     * rejects duplicates; generated names never collide with a name already held.
+     * the client ignores names it already shows. A login whose name is held (exactly, also a generated one) by
+     * another address is answered with {@link GamePacket.LoginRejected} (name-taken) instead of the ack: nothing
+     * is registered and nobody is told. The name is free again once its holder is gone. Generated names never
+     * collide with a name already held.
      */
     private void onLogin(SocketAddress from, String name, int x, int y) {
         List<SocketAddress> others = null;
         List<byte[]> roster = null;
+        boolean taken = false;
         synchronized (lock) {
             Entry self = players.get(from);
             if (self == null) {
                 if (players.size() >= MAX_CLIENTS) return;
-                if (name == null) {
+                if (name != null && isNameHeld(name)) {
+                    taken = true; // nothing is registered and nobody is told
+                } else if (name == null) {
                     players.put(from, new Entry(generateName(), false, 0, 0, 0, 0, -1));
                 } else {
                     others = new ArrayList<>(players.keySet());
@@ -153,6 +158,10 @@ public final class Server extends Endpoint {
                     }
                 }
             }
+        }
+        if (taken) {
+            reply(from, new GamePacket.LoginRejected(GamePacket.REASON_NAME_TAKEN).toBytes());
+            return;
         }
         reply(from, Protocol.JOIN_ACK);
         if (roster != null) {
@@ -182,6 +191,14 @@ public final class Server extends Endpoint {
             relay = new GamePacket.Move(e.name(), move.x(), move.y(), move.dir(), move.walkFrame(), move.seq()).toBytes();
         }
         for (SocketAddress other : others) reply(other, relay);
+    }
+
+    /** Whether some logged-in address holds exactly this name (case-sensitive). Caller holds {@link #lock}. */
+    private boolean isNameHeld(String name) {
+        for (Entry e : players.values()) {
+            if (e.name().equals(name)) return true;
+        }
+        return false;
     }
 
     private String generateName() {

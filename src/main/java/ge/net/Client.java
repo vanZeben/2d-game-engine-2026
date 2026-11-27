@@ -28,6 +28,8 @@ public final class Client extends Endpoint {
     private final byte[] loginBytes;
     private final String name;
     private volatile boolean joined;
+    /** Set when the server refused the login: the join loop stops resending and awaitJoined returns false. */
+    private volatile boolean rejected;
     /** Counted down on join or close: wakes the join loop and any awaitJoined. */
     private final CountDownLatch wake = new CountDownLatch(1);
 
@@ -86,7 +88,12 @@ public final class Client extends Endpoint {
         return joined;
     }
 
-    /** Blocks up to the timeout for the server's ack; returns {@link #isJoined()}. */
+    /** True once the server answered the login with a {@link GamePacket.LoginRejected}; never joined after that. */
+    public boolean isRejected() {
+        return rejected;
+    }
+
+    /** Blocks up to the timeout for the server's ack (or its rejection, or close); returns {@link #isJoined()}. */
     public boolean awaitJoined(long timeoutMillis) {
         try {
             wake.await(timeoutMillis, TimeUnit.MILLISECONDS);
@@ -148,7 +155,7 @@ public final class Client extends Endpoint {
 
     private void joinLoop() {
         try {
-            while (!isClosed() && !isJoined()) {
+            while (!isClosed() && !isJoined() && !isRejected()) {
                 send(server, loginBytes);
                 wake.await(RETRANSMIT_MS, TimeUnit.MILLISECONDS);
             }
@@ -170,6 +177,11 @@ public final class Client extends Endpoint {
         }
         if (Protocol.isPong(data)) {
             onPong();
+            return true;
+        }
+        if (!joined && GamePacket.parse(data).orElse(null) instanceof GamePacket.LoginRejected) {
+            rejected = true; // only an unanswered login can be refused; a late reject after the ack is ignored
+            wake.countDown();
             return true;
         }
         return false; // game packets go to the game thread

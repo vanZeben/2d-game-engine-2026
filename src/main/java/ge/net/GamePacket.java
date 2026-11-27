@@ -25,6 +25,13 @@ public sealed interface GamePacket {
     String ID_MOVE = "02";
     String ID_PLAYER_JOINED = "03";
     String ID_PLAYER_LEFT = "04";
+    String ID_LOGIN_REJECTED = "05";
+
+    /** The {@link LoginRejected} reason for a login whose name another address already holds. */
+    String REASON_NAME_TAKEN = "name-taken";
+
+    /** Longest valid rejection reason. */
+    int MAX_REASON = 20;
 
     /** The two-character packet ID. */
     String id();
@@ -97,6 +104,29 @@ public sealed interface GamePacket {
     }
 
     /**
+     * Server to client: the login was refused, for {@code reason} (1 to {@value #MAX_REASON} characters of
+     * {@code [a-z-]}, e.g. {@link #REASON_NAME_TAKEN}). The client stops resending its login. Wire form
+     * {@code "05,REASON"}.
+     */
+    record LoginRejected(String reason) implements GamePacket {
+        public LoginRejected {
+            if (reason == null || !Fields.REASON.matcher(reason).matches()) {
+                throw new IllegalArgumentException("bad reject reason: " + reason);
+            }
+        }
+
+        @Override
+        public String id() {
+            return ID_LOGIN_REJECTED;
+        }
+
+        @Override
+        public byte[] toBytes() {
+            return (ID_LOGIN_REJECTED + "," + reason).getBytes(StandardCharsets.US_ASCII);
+        }
+    }
+
+    /**
      * A player's full state: position (world pixel of the sprite's top-left corner), facing ({@code dir} = the
      * ordinal of {@code Mob.Dir}, 0..3), walk frame (0 or 1) and a sequence number. Client to server, stamped by the
      * sender with an increasing {@code seq} (from 0); the server relays it to the other players under the sender's
@@ -165,6 +195,10 @@ public sealed interface GamePacket {
                     if (f.length != 2 || !isValidName(f[1])) return Optional.empty();
                     return Optional.of(new PlayerLeft(f[1]));
                 }
+                case ID_LOGIN_REJECTED -> {
+                    if (f.length != 2 || !Fields.REASON.matcher(f[1]).matches()) return Optional.empty();
+                    return Optional.of(new LoginRejected(f[1]));
+                }
                 default -> {
                     return Optional.empty();
                 }
@@ -177,6 +211,7 @@ public sealed interface GamePacket {
     /** Field syntax shared by the packets (an interface cannot hold private constants). */
     final class Fields {
         static final Pattern NAME = Pattern.compile("[A-Za-z0-9_]{1," + MAX_NAME + "}");
+        static final Pattern REASON = Pattern.compile("[a-z-]{1," + MAX_REASON + "}");
         /** Canonical decimal: what {@code Integer.toString} writes, so parse(toBytes(p)) round-trips byte for byte. */
         private static final Pattern INTEGER = Pattern.compile("0|-?[1-9][0-9]{0,9}");
 

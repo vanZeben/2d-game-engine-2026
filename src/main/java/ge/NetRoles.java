@@ -12,6 +12,16 @@ final class NetRoles {
     static final long JOIN_TIMEOUT_MS = 3000;
     /** Exit status of a headless client that was never acked. */
     static final int EXIT_JOIN_FAILED = 3;
+    /** Exit status of a headless client whose login the server rejected (its name is taken). */
+    static final int EXIT_LOGIN_REJECTED = 4;
+
+    /** Why {@link #joinHeadless} returned no client: the exit status to use (set on the calling thread's failure only). */
+    private static final ThreadLocal<Integer> LAST_FAILURE = ThreadLocal.withInitial(() -> EXIT_JOIN_FAILED);
+
+    /** The exit status for the {@code null} the last {@link #joinHeadless} on this thread returned. */
+    static int joinFailureExit() {
+        return LAST_FAILURE.get();
+    }
 
     private NetRoles() {}
 
@@ -79,7 +89,7 @@ final class NetRoles {
 
     /**
      * Headless client: connects (logging in as {@code name} at 0,0, or nameless if null) and waits for the ack.
-     * @return the connected client (caller closes it, which sends the disconnect; a shutdown hook does too), or null after printing {@code client join failed ...}
+     * @return the connected client (caller closes it, which sends the disconnect; a shutdown hook does too), or null after printing {@code client join failed ...} (exit {@value #EXIT_JOIN_FAILED}) or {@code client login rejected name=NAME} (exit {@value #EXIT_LOGIN_REJECTED}; see {@link #joinFailureExit})
      */
     static Client joinHeadless(Address to, String name, PrintStream out) throws IOException {
         return joinHeadless(to, name, null, out);
@@ -98,8 +108,15 @@ final class NetRoles {
             Runtime.getRuntime().addShutdownHook(new Thread(c::close, "client-close"));
             return c;
         }
+        boolean rejected = c.isRejected();
         c.close();
-        out.println("client join failed server=" + to.text());
+        if (rejected) {
+            LAST_FAILURE.set(EXIT_LOGIN_REJECTED);
+            out.println("client login rejected name=" + c.name());
+        } else {
+            LAST_FAILURE.set(EXIT_JOIN_FAILED);
+            out.println("client join failed server=" + to.text());
+        }
         out.flush();
         return null;
     }

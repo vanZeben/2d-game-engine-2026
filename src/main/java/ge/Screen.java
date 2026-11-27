@@ -58,12 +58,25 @@ public class Screen {
      * @throws IllegalArgumentException as the 6-argument method, or if {@code mirror} has any other bit set
      */
     public void drawTile(SpriteSheet sheet, int tileX, int tileY, int x, int y, int[] colours, int mirror) {
-        if (colours == null || colours.length != SpriteSheet.COLOURS) {
-            throw new IllegalArgumentException("colours must have exactly " + SpriteSheet.COLOURS + " entries");
-        }
+        drawTile(sheet, tileX, tileY, x, y, colours, mirror, 1);
+    }
+
+    /**
+     * Like {@link #drawTile(SpriteSheet, int, int, int, int, int[], int)} but each sheet pixel becomes a
+     * {@code scale} x {@code scale} block, so the tile covers {@code 8*scale} x {@code 8*scale} screen pixels with
+     * its top-left at (x, y). Screen pixel (x+dx, y+dy) shows tile pixel (dx/scale, dy/scale); mirroring is
+     * applied to the 8x8 source (source column 7-(dx/scale) for {@link #MIRROR_X}, likewise for Y). Scale 1 is
+     * exactly the unscaled method. Only the visible part is visited, so any {@code scale} up to
+     * {@link Integer#MAX_VALUE} at any (x, y) is cheap and never overflows.
+     *
+     * @throws IllegalArgumentException as the 7-argument method, or if {@code scale < 1} (even if the tile is off screen)
+     */
+    public void drawTile(SpriteSheet sheet, int tileX, int tileY, int x, int y, int[] colours, int mirror, int scale) {
+        checkColours(colours);
         checkMirror(mirror);
+        checkScale(scale);
         checkTile(sheet, tileX, tileY);
-        blit(sheet, tileX, tileY, x, y, colours, mirror);
+        blit(sheet, tileX, tileY, x, y, colours, mirror, scale);
     }
 
     /**
@@ -80,10 +93,29 @@ public class Screen {
 
     /** {@link #drawPaletteTile(SpriteSheet, int, int, int, int, int[])} with the mirroring of {@link #drawTile(SpriteSheet, int, int, int, int, int[], int)}. */
     public void drawPaletteTile(SpriteSheet sheet, int tileX, int tileY, int x, int y, int[] colours, int mirror) {
-        if (colours == null || colours.length != SpriteSheet.COLOURS) {
-            throw new IllegalArgumentException("colours must have exactly " + SpriteSheet.COLOURS + " entries");
-        }
+        drawPaletteTile(sheet, tileX, tileY, x, y, colours, mirror, 1);
+    }
+
+    /**
+     * {@link #drawPaletteTile(SpriteSheet, int, int, int, int, int[], int)} drawn at an integer {@code scale}; see
+     * {@link #drawTile(SpriteSheet, int, int, int, int, int[], int, int)} for the geometry.
+     *
+     * @throws IllegalArgumentException as the 7-argument method, or if {@code scale < 1} (even if off screen)
+     */
+    public void drawPaletteTile(SpriteSheet sheet, int tileX, int tileY, int x, int y, int[] colours, int mirror,
+            int scale) {
+        drawPaletteTile(sheet, tileX, tileY, (long) x, (long) y, colours, mirror, scale);
+    }
+
+    /**
+     * As the {@code int} position overload, with a {@code long} top-left so callers that advance a cursor in long
+     * arithmetic (scaled text) can place a block starting beyond the int range whose far part is still visible.
+     */
+    public void drawPaletteTile(SpriteSheet sheet, int tileX, int tileY, long x, long y, int[] colours, int mirror,
+            int scale) {
+        checkColours(colours);
         checkMirror(mirror);
+        checkScale(scale);
         checkTile(sheet, tileX, tileY);
         // Resolve palette indexes to rgb once per tile (4 table reads) into a reusable scratch array,
         // so the pixel loop is a plain int lookup and nothing is allocated per call.
@@ -91,7 +123,17 @@ public class Screen {
             int c = colours[i];
             tileColours[i] = c == Palette.TRANSPARENT ? Palette.TRANSPARENT : Palette.rgb(c);
         }
-        blit(sheet, tileX, tileY, x, y, tileColours, mirror);
+        blit(sheet, tileX, tileY, x, y, tileColours, mirror, scale);
+    }
+
+    private static void checkColours(int[] colours) {
+        if (colours == null || colours.length != SpriteSheet.COLOURS) {
+            throw new IllegalArgumentException("colours must have exactly " + SpriteSheet.COLOURS + " entries");
+        }
+    }
+
+    private static void checkScale(int scale) {
+        if (scale < 1) throw new IllegalArgumentException("scale must be at least 1, got " + scale);
     }
 
     private static void checkMirror(int mirror) {
@@ -112,18 +154,16 @@ public class Screen {
     /**
      * The one tile loop. {@code rgb[i]} is the 0xRRGGBB for sheet colour index i, or
      * {@link Palette#TRANSPARENT} (-1, never a valid 0xRRGGBB) to skip those pixels.
-     * Mirroring only changes which source column/row a destination offset reads; episode 10 (scaling)
-     * is meant to change only how the destination offsets and the source step are derived.
+     * The block covers {@code 8*scale} pixels each way from (x, y); it is clipped to the buffer in long arithmetic
+     * and only visible destination pixels are visited. Along a row the visible part is cut into runs that share one
+     * source pixel (one run per source column), so a run is at most {@code width} long and fits an int.
+     * Mirroring only changes which source column/row a destination offset reads.
      */
-    private void blit(SpriteSheet sheet, int tileX, int tileY, int x, int y, int[] rgb, int mirror) {
-        // Clip the 8x8 rectangle to the buffer once, so the inner loops need no bounds checks.
-        // Done in long arithmetic and clamped to 0..TILE_SIZE BEFORE narrowing to int: x/y may be
-        // anywhere in the int range (-(long) Integer.MIN_VALUE does not fit an int).
-        int x0 = (int) Math.min(TILE_SIZE, Math.max(0L, -(long) x));
-        int y0 = (int) Math.min(TILE_SIZE, Math.max(0L, -(long) y));
-        int x1 = (int) Math.max(0L, Math.min(TILE_SIZE, (long) width - x));
-        int y1 = (int) Math.max(0L, Math.min(TILE_SIZE, (long) height - y));
-        if (x0 >= x1 || y0 >= y1) return;
+    private void blit(SpriteSheet sheet, int tileX, int tileY, long x, long y, int[] rgb, int mirror, int scale) {
+        long size = (long) TILE_SIZE * scale; // <= 8 * (2^31 - 1), fits a long
+        long sx0 = Math.max(0L, x), sx1 = Math.min(width, x + size);
+        long sy0 = Math.max(0L, y), sy1 = Math.min(height, y + size);
+        if (sx0 >= sx1 || sy0 >= sy1) return;
 
         int[] sheetPixels = sheet.pixels();
         int sheetWidth = sheet.width();
@@ -131,18 +171,31 @@ public class Screen {
         int sheetBase = tileY * TILE_SIZE * sheetWidth + tileX * TILE_SIZE;
         boolean flipX = (mirror & MIRROR_X) != 0;
         boolean flipY = (mirror & MIRROR_Y) != 0;
-        for (int ty = y0; ty < y1; ty++) {
-            // ty is the row of the block on screen; the tile row shown there is 7-ty when flipped.
-            int src = sheetBase + (flipY ? TILE_SIZE - 1 - ty : ty) * sheetWidth;
-            int dst = (y + ty) * width + x;
-            for (int tx = x0; tx < x1; tx++) {
-                int c = switch (sheetPixels[src + (flipX ? TILE_SIZE - 1 - tx : tx)]) {
+        // Source column and offset inside its block at the first visible pixel (same for every row).
+        long firstDx = sx0 - x;
+        int firstU = (int) (firstDx / scale);
+        long firstRem = firstDx % scale;
+        for (int sy = (int) sy0; sy < sy1; sy++) {
+            int v = (int) ((sy - y) / scale);
+            int src = sheetBase + (flipY ? TILE_SIZE - 1 - v : v) * sheetWidth;
+            int dst = sy * width;
+            int u = firstU;
+            long rem = firstRem;
+            for (long px = sx0; px < sx1; u++) {
+                int run = (int) Math.min(sx1 - px, scale - rem); // <= width
+                int c = switch (sheetPixels[src + (flipX ? TILE_SIZE - 1 - u : u)]) {
                     case 0 -> c0;
                     case 1 -> c1;
                     case 2 -> c2;
                     default -> c3;
                 };
-                if (c != Palette.TRANSPARENT) pixels[dst + tx] = c;
+                int from = dst + (int) px;
+                if (c != Palette.TRANSPARENT) {
+                    if (run == 1) pixels[from] = c;
+                    else Arrays.fill(pixels, from, from + run, c);
+                }
+                px += run;
+                rem = 0;
             }
         }
     }

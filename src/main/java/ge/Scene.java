@@ -14,11 +14,11 @@ import ge.level.Tile;
  *
  * <p>Syntax:
  * <ul>
- *   <li>{@code tile:TX,TY@PX,PY[:colours=C0,C1,C2,C3][:mirror=M]} - the tile at pixel (PX,PY) (may be negative)</li>
- *   <li>{@code fill:TX,TY[:colours=C0,C1,C2,C3][:mirror=M]} - the tile at every (8*i, 8*j) covering the screen</li>
- *   <li>{@code text:X,Y[:colours=C0,C1,C2,C3]:TEXT} - {@link Font} text with its top-left at pixel (X,Y)
+ *   <li>{@code tile:TX,TY@PX,PY[:colours=C0,C1,C2,C3][:mirror=M][:scale=N]} - the tile at pixel (PX,PY) (may be negative)</li>
+ *   <li>{@code fill:TX,TY[:colours=C0,C1,C2,C3][:mirror=M][:scale=N]} - the tile at every (8*N*i, 8*N*j) covering the screen</li>
+ *   <li>{@code text:X,Y[:colours=C0,C1,C2,C3][:scale=N]:TEXT} - {@link Font} text with its top-left at pixel (X,Y)
  *       (may be negative). TEXT is the last field, verbatim (it may contain ':' and may be empty); the colours
- *       option is recognised only when the part after "X,Y:" starts with {@code colours=}. Without it the
+ *       and scale options are recognised only at the start of the part after "X,Y:" ({@code colours=} first). Without it the
  *       text is white ink on a transparent background.</li>
  *   <li>{@code level:gen:W,H,SEED@XOFF,YOFF} - {@link Level#generate(int, int, long)} (W,H >= 1 tiles, SEED a
  *       long) drawn with the view scrolled to pixel offset (XOFF,YOFF) (may be negative)</li>
@@ -26,7 +26,8 @@ import ge.level.Tile;
  *       sprite top-left at pixel (SPAWNX,SPAWNY) (may be negative)</li>
  *   <li>{@code game:grass:W,H@SPAWNX,SPAWNY} - the same with a W x H level of all grass</li>
  * </ul>
- * The optional parts may come in either order, each at most once. M is {@code x}, {@code y} or {@code xy}
+ * The optional parts of tile:/fill: may come in any order, each at most once (those of text: in the order shown,
+ * before the text). N is an integer >= 1: each sheet pixel is drawn as an N x N block. M is {@code x}, {@code y} or {@code xy}
  * (flip each 8x8 block in place on X, on Y, or both).
  * Each Ci is three digits "RGB" (levels 0..5, a {@link Palette} entry) or "t" for transparent. Without
  * {@code colours=} the tile is drawn in the interim grey (as in episode 3), via {@code drawTile}.
@@ -57,6 +58,8 @@ public final class Scene {
     private final int[] colours;
     /** The recipe of a {@code game:} scene, or null. */
     private final GameSpec game;
+    /** Integer scale (>= 1) of a tile:, fill: or text: scene; 1 for every other scene. */
+    private final int scale;
 
     /** What a {@code game:} scene builds: a level (all grass, or generated from seed) and a spawn point. */
     private record GameSpec(boolean grass, int width, int height, long seed, int spawnX, int spawnY) {}
@@ -68,7 +71,13 @@ public final class Scene {
 
     private Scene(SpriteSheet sheet, boolean fill, int tileX, int tileY, int x, int y, int[] colours, int mirror,
             String text, Level level, GameSpec game) {
+        this(sheet, fill, tileX, tileY, x, y, colours, mirror, text, level, game, 1);
+    }
+
+    private Scene(SpriteSheet sheet, boolean fill, int tileX, int tileY, int x, int y, int[] colours, int mirror,
+            String text, Level level, GameSpec game, int scale) {
         this.sheet = sheet;
+        this.scale = scale;
         this.fill = fill;
         this.tileX = tileX;
         this.tileY = tileY;
@@ -93,9 +102,10 @@ public final class Scene {
         if (spec.startsWith(LEVEL_PREFIX)) return parseLevel(spec);
         if (spec.startsWith(GAME_PREFIX)) return parseGame(spec);
         String bad = "bad --scene '" + spec + "' (expected tile:TX,TY@PX,PY[:colours=C0,C1,C2,C3][:mirror=M] "
-                + "or fill:TX,TY[:colours=C0,C1,C2,C3][:mirror=M]; Ci = three digits 0..5 or t; M = x, y or xy)";
+                + "or fill:TX,TY[:colours=C0,C1,C2,C3][:mirror=M][:scale=N]; Ci = three digits 0..5 or t; M = x, y or xy; "
+                + "N an integer >= 1; each option at most once)";
         String[] parts = spec.split(":", -1);
-        if (parts.length < 2 || parts.length > 4) throw new IllegalArgumentException(bad);
+        if (parts.length < 2 || parts.length > 5) throw new IllegalArgumentException(bad);
         boolean fill;
         switch (parts[0]) {
             case "tile" -> fill = false;
@@ -114,7 +124,8 @@ public final class Scene {
         }
         int[] colours = null;
         int mirror = Screen.MIRROR_NONE;
-        boolean haveColours = false, haveMirror = false;
+        int scale = 1;
+        boolean haveColours = false, haveMirror = false, haveScale = false;
         for (int i = 2; i < parts.length; i++) {
             if (parts[i].startsWith("colours=") && !haveColours) {
                 colours = colours(parts[i], bad);
@@ -122,6 +133,9 @@ public final class Scene {
             } else if (parts[i].startsWith("mirror=") && !haveMirror) {
                 mirror = mirror(parts[i].substring("mirror=".length()), bad);
                 haveMirror = true;
+            } else if (parts[i].startsWith("scale=") && !haveScale) {
+                scale = scale(parts[i], bad);
+                haveScale = true;
             } else {
                 throw new IllegalArgumentException(bad);
             }
@@ -132,13 +146,13 @@ public final class Scene {
             throw new IllegalArgumentException("bad --scene '" + spec + "': tile outside the "
                     + tilesX + "x" + tilesY + " grid");
         }
-        return new Scene(sheet, fill, tile[0], tile[1], pos[0], pos[1], colours, mirror, null, null);
+        return new Scene(sheet, fill, tile[0], tile[1], pos[0], pos[1], colours, mirror, null, null, null, scale);
     }
 
     /** {@code text:X,Y[:colours=...]:TEXT}. TEXT is everything after the delimiter, so it may contain ':'. */
     private static Scene parseText(String spec) {
-        String bad = "bad --scene '" + spec + "' (expected text:X,Y[:colours=C0,C1,C2,C3]:TEXT; "
-                + "Ci = three digits 0..5 or t)";
+        String bad = "bad --scene '" + spec + "' (expected text:X,Y[:colours=C0,C1,C2,C3][:scale=N]:TEXT; "
+                + "Ci = three digits 0..5 or t; N an integer >= 1)";
         String rest = spec.substring(TEXT_PREFIX.length());
         int colon = rest.indexOf(':');
         if (colon < 0) throw new IllegalArgumentException(bad); // no text field
@@ -151,7 +165,14 @@ public final class Scene {
             colours = colours(after.substring(0, end), bad);
             after = after.substring(end + 1);
         }
-        return new Scene(sheet(), false, 0, 0, pos[0], pos[1], colours, Screen.MIRROR_NONE, after, null);
+        int scale = 1;
+        if (after.startsWith("scale=")) {
+            int end = after.indexOf(':');
+            if (end < 0) throw new IllegalArgumentException(bad); // scale but no text field
+            scale = scale(after.substring(0, end), bad);
+            after = after.substring(end + 1);
+        }
+        return new Scene(sheet(), false, 0, 0, pos[0], pos[1], colours, Screen.MIRROR_NONE, after, null, null, scale);
     }
 
     /** {@code level:gen:W,H,SEED@XOFF,YOFF}. */
@@ -263,6 +284,17 @@ public final class Scene {
         return out;
     }
 
+    /** Parses {@code scale=N}, an integer >= 1. */
+    private static int scale(String part, String error) {
+        try {
+            int n = Integer.parseInt(part.substring("scale=".length()));
+            if (n >= 1) return n;
+        } catch (NumberFormatException e) {
+            // fall through
+        }
+        throw new IllegalArgumentException(error);
+    }
+
     private static int mirror(String word, String error) {
         return switch (word) {
             case "x" -> Screen.MIRROR_X;
@@ -283,10 +315,11 @@ public final class Scene {
         } else if (level != null) {
             level.render(screen, sheet, x, y);
         } else if (text != null) {
-            Font.render(screen, sheet, text, x, y, colours);
+            Font.render(screen, sheet, text, x, y, colours, scale);
         } else if (fill) {
-            for (int py = 0; py < screen.height; py += Screen.TILE_SIZE) {
-                for (int px = 0; px < screen.width; px += Screen.TILE_SIZE) draw(screen, px, py);
+            long step = (long) Screen.TILE_SIZE * scale; // long: 8 * scale can exceed an int
+            for (long py = 0; py < screen.height; py += step) {
+                for (long px = 0; px < screen.width; px += step) draw(screen, (int) px, (int) py);
             }
         } else {
             draw(screen, x, y);
@@ -294,7 +327,7 @@ public final class Scene {
     }
 
     private void draw(Screen screen, int px, int py) {
-        if (colours == null) screen.drawTile(sheet, tileX, tileY, px, py, INTERIM_GREY, mirror);
-        else screen.drawPaletteTile(sheet, tileX, tileY, px, py, colours, mirror);
+        if (colours == null) screen.drawTile(sheet, tileX, tileY, px, py, INTERIM_GREY, mirror, scale);
+        else screen.drawPaletteTile(sheet, tileX, tileY, px, py, colours, mirror, scale);
     }
 }

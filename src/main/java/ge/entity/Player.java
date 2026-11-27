@@ -11,8 +11,10 @@ public final class Player extends Mob {
     public static final int SIZE = 16;
     /** Pixels moved per tick on each held axis. */
     public static final int SPEED = 1;
-    /** Sprite-sheet tile of the top-left quarter of the facing-down sprite; the sprite is 2x2 tiles from here. */
-    private static final int SHEET_X = 0, SHEET_Y = 28;
+    /** Sprite-sheet tile row of the top half of every pose; each pose is 2x2 tiles (top row here, bottom row +1). */
+    private static final int SHEET_Y = 28;
+    /** Sprite-sheet tile column of the left half of each pose: down, up, sideways frame 0, sideways frame 1. */
+    private static final int COL_DOWN = 0, COL_UP = 2, COL_SIDE_0 = 4, COL_SIDE_1 = 6;
     /** Palette index (or transparent) for each sprite-sheet colour index 0..3. */
     public static final int[] COLOURS = {
         Palette.TRANSPARENT, Palette.index(1, 1, 3), Palette.index(5, 4, 3), Palette.index(5, 5, 5)};
@@ -31,11 +33,31 @@ public final class Player extends Mob {
 
     @Override
     public void render(Screen screen, SpriteSheet sheet, int xOffset, int yOffset) {
-        int sx = x() - xOffset, sy = y() - yOffset;
+        drawPose(screen, sheet, x() - xOffset, y() - yOffset, dir(), walkFrame());
+    }
+
+    /**
+     * Draws the 16x16 sprite for a facing and walk frame with its top-left at screen (sx, sy). Depends only on
+     * (dir, walkFrame), so remote players can render from network state. Down and up have one sheet frame, so
+     * walk frame 1 is that frame flipped left-right; sideways uses two sheet frames (drawn facing right) and
+     * LEFT flips the whole sprite.
+     */
+    public static void drawPose(Screen screen, SpriteSheet sheet, int sx, int sy, Dir dir, int walkFrame) {
+        int col;
+        boolean mirror;
+        switch (dir) {
+            case DOWN -> { col = COL_DOWN; mirror = walkFrame == 1; }
+            case UP -> { col = COL_UP; mirror = walkFrame == 1; }
+            case RIGHT -> { col = walkFrame == 0 ? COL_SIDE_0 : COL_SIDE_1; mirror = false; }
+            default -> { col = walkFrame == 0 ? COL_SIDE_0 : COL_SIDE_1; mirror = true; }
+        }
         int half = Screen.TILE_SIZE;
-        screen.drawPaletteTile(sheet, SHEET_X, SHEET_Y, sx, sy, COLOURS);
-        screen.drawPaletteTile(sheet, SHEET_X + 1, SHEET_Y, sx + half, sy, COLOURS);
-        screen.drawPaletteTile(sheet, SHEET_X, SHEET_Y + 1, sx, sy + half, COLOURS);
-        screen.drawPaletteTile(sheet, SHEET_X + 1, SHEET_Y + 1, sx + half, sy + half, COLOURS);
+        int flip = mirror ? Screen.MIRROR_X : Screen.MIRROR_NONE;
+        // Mirroring the 2x2 sprite also swaps its left and right tiles.
+        int leftX = mirror ? sx + half : sx, rightX = mirror ? sx : sx + half;
+        screen.drawPaletteTile(sheet, col, SHEET_Y, leftX, sy, COLOURS, flip);
+        screen.drawPaletteTile(sheet, col + 1, SHEET_Y, rightX, sy, COLOURS, flip);
+        screen.drawPaletteTile(sheet, col, SHEET_Y + 1, leftX, sy + half, COLOURS, flip);
+        screen.drawPaletteTile(sheet, col + 1, SHEET_Y + 1, rightX, sy + half, COLOURS, flip);
     }
 }

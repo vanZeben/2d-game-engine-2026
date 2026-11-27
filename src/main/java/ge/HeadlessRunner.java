@@ -21,7 +21,7 @@ public class HeadlessRunner {
     }
 
     /**
-     * @param tracePlayer if non-null (needs a game world), receives one {@code tick=T x=X y=Y camx=CX camy=CY} line
+     * @param tracePlayer if non-null (needs a game world), receives one {@code tick=T x=X y=Y camx=CX camy=CY dir=D frame=F} line
      *                    after each tick's update, after the {@code trace} line of that tick
      */
     public static Result run(Game game, long ticks, Path dumpDir, InputScript script, PrintStream trace,
@@ -45,7 +45,8 @@ public class HeadlessRunner {
     static String playerLine(Game game) {
         World w = game.world();
         return "tick=" + game.tickCount() + " x=" + w.player().x() + " y=" + w.player().y()
-                + " camx=" + w.cameraX() + " camy=" + w.cameraY();
+                + " camx=" + w.cameraX() + " camy=" + w.cameraY()
+                + " dir=" + w.player().dir().name().toLowerCase() + " frame=" + w.player().walkFrame();
     }
 
     static String traceLine(Game game) {

@@ -12,7 +12,7 @@ import java.nio.file.Paths;
  *                      [--scene SPEC] [--trace-input] [--trace-player]
  *   --script FILE    scripted key events (docs/script-format.md); a bad file exits 2 before running
  *   --trace-input    print one "tick=T up=U down=D left=L right=R" line per tick
- *   --trace-player   with a game: scene, print one "tick=T x=X y=Y camx=CX camy=CY" line per tick
+ *   --trace-player   with a game: scene, print one "tick=T x=X y=Y camx=CX camy=CY dir=D frame=F" line per tick
  * Without --scene the window plays a generated world (game:gen).
  */
 public class Main {

@@ -26,3 +26,4 @@ Run started 2026-11-27 00:36 EST (America/Toronto). Hard stop at 08:36 EST.
 - 01:54 ep-09 | attempts=2 reviews (1 send-back), builder 1, test-writer 3 (1 over budget) | fail-before: test on main exit 1 (37 errors) | APPROVE on re-review: 134/134 | guards caught: lead caught ep-11/12 conflicts in the test pre-build; reviewer SEND BACK #1 for a water spawn that pinned the sprite (ep-14 conflict) and exact trace equality; re-reviewer self-reported a ~/.java write
 - 02:00 ep-10 | attempts=1 | fail-before: 9298589 exit 1 (25 errors) | APPROVE: 144/144 clean, scaled blit visible-pixels only (MAX_VALUE scale) | guards caught: nothing
 - 02:06 ep-11 | attempts=1 | fail-before: 05c587f exit 1 | APPROVE: 149/149 clean, pose rules verified against sheet rows 28-29 | guards caught: nothing
+- 02:14 ep-12 | attempts=1 | fail-before: 0237cee exit 1; with only BOX_* consts 15/19 Ep12 fail | APPROVE: 168/168 clean, 1px step per axis = no tunnelling | guards caught: nothing

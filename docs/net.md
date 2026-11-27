@@ -2,11 +2,11 @@
 
 ## Why UDP
 
-The game sends small, frequent position updates where only the newest matters. TCP would retransmit and block stale positions, so one lost packet stalls everything behind it. UDP (`DatagramSocket`, one datagram per packet) lets the next update supersede a lost one. No TCP class is used.
+The game sends frequent position updates where only the newest matters. TCP would retransmit and block stale positions, so one lost packet stalls everything behind it. UDP (`DatagramSocket`, one datagram per packet) lets the next update supersede a lost one.
 
 ## Delivery
 
-UDP may lose packets. The game resends what must arrive until acknowledged: the client repeats its login (replacing the GE1 join) every 100 ms until the server acks. A quitting client resends disconnect until acked, stopping after 10 tries. Moves are not acked. Instead the client sends its full state (position, facing, walk frame, seq) at least every second, even idle, so any lost move, including the last, is repaired. The server's periodic full-state stream lists every player, so join and leave notices reach clients unacked.
+UDP may lose packets. The game resends what must arrive until acknowledged: the client repeats its login (replacing the GE1 join) every 100 ms until the server answers. A quitting client resends disconnect until acked, stopping after 10 tries. Moves are not acked. The client sends its full state (position, facing, walk frame, seq) at least every second, even idle, so any lost move is repaired. The server's periodic full-state stream lists every player, so join and leave notices reach clients unacked.
 
 ## Ordering
 
@@ -18,4 +18,4 @@ UDP may deliver a packet twice; retransmits add more. The server is idempotent: 
 
 ## Connection state
 
-UDP has no connections, so the server builds its own. Login (carrying the name) creates a player; disconnect removes it. Any valid packet refreshes a timer; a client silent over 10 seconds is removed, so heartbeats keep idle players alive and a crashed client leaves no ghost. Except login, packets from unknown addresses are dropped. A login reusing a name held by another address is rejected. Malformed packets are ignored.
+UDP has no connections, so the server builds its own. Login (carrying the name) creates a player; disconnect removes it. Any valid packet refreshes a timer; a client silent over 10 seconds is removed, so heartbeats keep idle players alive and a crashed client leaves no ghost. Except login and disconnect (acked only), packets from unknown addresses are dropped. A login reusing a name held by another address is answered with a reject packet that stops resends. Malformed packets are ignored.

@@ -9,3 +9,4 @@ Run started 2026-11-27 00:36 EST (America/Toronto). Hard stop at 08:36 EST.
 
 ## Episodes
 - 00:41 ep-01 | attempts=1 builder (+1 test fix) | APPROVE: clean build 6/6, build.sh fails on failure, no faking | guards caught: builder refused uncompilable test (local 'java' shadowed java.util), test-writer fixed compile only
+- 00:44 ep-02 | attempts=1 | APPROVE: 12/12 clean, blue>>6 rule sound vs sheet greys, full-array check independent | guards caught: nothing

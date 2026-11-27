@@ -109,16 +109,21 @@ public final class ClientGame implements AutoCloseable {
 
     private void apply(Packet p) {
         GamePacket.parse(p.data()).ifPresent(g -> {
-            if (g instanceof GamePacket.PlayerJoined j && !j.name().equals(name) && !remotes.containsKey(j.name())) {
-                RemotePlayer r = new RemotePlayer(j.name(), j.x(), j.y());
-                remotes.put(j.name(), r);
-                world.add(r);
+            if (g instanceof GamePacket.PlayerJoined j && !j.name().equals(name)) {
+                RemotePlayer known = remotes.get(j.name());
+                if (known != null) {
+                    known.reset(j.x(), j.y()); // announced again: a new session whose seq restarted (we missed its PlayerLeft)
+                } else {
+                    RemotePlayer r = new RemotePlayer(j.name(), j.x(), j.y());
+                    remotes.put(j.name(), r);
+                    world.add(r);
+                }
             } else if (g instanceof GamePacket.PlayerLeft l) {
                 RemotePlayer r = remotes.remove(l.name()); // forgotten, so a later PlayerJoined adds it again
                 if (r != null) world.remove(r);
             } else if (g instanceof GamePacket.Move m) {
                 RemotePlayer r = remotes.get(m.name()); // unknown names and our own name are not in the map
-                if (r != null) r.applyMove(m.x(), m.y(), m.seq());
+                if (r != null) r.applyMove(m.x(), m.y(), m.dir(), m.walkFrame(), m.seq());
             }
         });
     }

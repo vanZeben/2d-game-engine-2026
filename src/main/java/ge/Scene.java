@@ -22,6 +22,11 @@ import ge.level.Tile;
  *       text is white ink on a transparent background.</li>
  *   <li>{@code level:gen:W,H,SEED@XOFF,YOFF} - {@link Level#generate(int, int, long)} (W,H >= 1 tiles, SEED a
  *       long) drawn with the view scrolled to pixel offset (XOFF,YOFF) (may be negative)</li>
+ *   <li>{@code level:png:RES@XOFF,YOFF} - the same, but the level is {@link Level#load(String)} of RES (a classpath
+ *       resource when it starts with '/', else a file path; an unknown pixel colour is void). A missing or
+ *       unreadable RES makes {@link #parse} throw {@link IllegalArgumentException}.</li>
+ *   <li>{@code game:png:RES@SPAWNX,SPAWNY} - a playable {@link World} on {@link Level#load(String)} of RES, the
+ *       player's sprite top-left at pixel (SPAWNX,SPAWNY); the {@code :stone=} option below still applies</li>
  *   <li>{@code game:gen:W,H,SEED@SPAWNX,SPAWNY} - a playable {@link World}: the generated level with the player's
  *       sprite top-left at pixel (SPAWNX,SPAWNY) (may be negative)</li>
  *   <li>{@code game:grass:W,H@SPAWNX,SPAWNY} - the same with a W x H level of all grass</li>
@@ -65,7 +70,8 @@ public final class Scene {
     private final int scale;
 
     /** What a {@code game:} scene builds: a level (all grass, or generated from seed), a spawn point and cells forced to stone. */
-    private record GameSpec(boolean grass, int width, int height, long seed, int spawnX, int spawnY, int[][] stones) {}
+    private record GameSpec(boolean grass, int width, int height, long seed, int spawnX, int spawnY, int[][] stones,
+            Level loaded) {}
 
     private Scene(SpriteSheet sheet, boolean fill, int tileX, int tileY, int x, int y, int[] colours, int mirror,
             String text, Level level) {
@@ -178,10 +184,18 @@ public final class Scene {
         return new Scene(sheet(), false, 0, 0, pos[0], pos[1], colours, Screen.MIRROR_NONE, after, null, null, scale);
     }
 
-    /** {@code level:gen:W,H,SEED@XOFF,YOFF}. */
+    /** {@code level:gen:W,H,SEED@XOFF,YOFF} or {@code level:png:RES@XOFF,YOFF}. */
     private static Scene parseLevel(String spec) {
-        String bad = "bad --scene '" + spec + "' (expected level:gen:W,H,SEED@XOFF,YOFF; W,H >= 1 tiles, "
-                + "SEED a long, XOFF,YOFF integers)";
+        String bad = "bad --scene '" + spec + "' (expected level:gen:W,H,SEED@XOFF,YOFF or level:png:RES@XOFF,YOFF; "
+                + "W,H >= 1 tiles, SEED a long, XOFF,YOFF integers)";
+        String png = "level:png:";
+        if (spec.startsWith(png)) {
+            int at = spec.lastIndexOf('@');
+            if (at < png.length()) throw new IllegalArgumentException(bad);
+            int[] off = ints(spec.substring(at + 1), bad);
+            return new Scene(sheet(), false, 0, 0, off[0], off[1], null, Screen.MIRROR_NONE, null,
+                    loadLevel(spec.substring(png.length(), at), spec));
+        }
         String gen = "level:gen:";
         if (!spec.startsWith(gen)) throw new IllegalArgumentException(bad);
         String[] halves = spec.substring(gen.length()).split("@", -1);
@@ -207,18 +221,31 @@ public final class Scene {
         return new Scene(sheet(), false, 0, 0, off[0], off[1], null, Screen.MIRROR_NONE, null, level);
     }
 
-    /** {@code game:gen:W,H,SEED@SPAWNX,SPAWNY} or {@code game:grass:W,H@SPAWNX,SPAWNY}. */
+    /** Level.load for a scene: a bad resource fails at parse time, naming the scene. */
+    private static Level loadLevel(String resource, String spec) {
+        try {
+            return Level.load(resource);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("bad --scene '" + spec + "': " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * {@code game:gen:W,H,SEED@SPAWNX,SPAWNY}, {@code game:grass:W,H@SPAWNX,SPAWNY} or
+     * {@code game:png:RES@SPAWNX,SPAWNY}, each optionally followed by {@code :stone=...}.
+     */
     private static Scene parseGame(String spec) {
-        String bad = "bad --scene '" + spec + "' (expected game:gen:W,H,SEED@SPAWNX,SPAWNY[:stone=TX,TY;...] or "
-                + "game:grass:W,H@SPAWNX,SPAWNY[:stone=TX,TY;...]; W,H >= 1 tiles, SEED a long, SPAWNX,SPAWNY and "
-                + "TX,TY integers)";
+        String bad = "bad --scene '" + spec + "' (expected game:gen:W,H,SEED@SPAWNX,SPAWNY[:stone=TX,TY;...], "
+                + "game:grass:W,H@SPAWNX,SPAWNY[:stone=TX,TY;...] or game:png:RES@SPAWNX,SPAWNY[:stone=TX,TY;...]; "
+                + "W,H >= 1 tiles, SEED a long, SPAWNX,SPAWNY and TX,TY integers)";
         String rest = spec.substring(GAME_PREFIX.length());
         int colon = rest.indexOf(':');
         if (colon < 0) throw new IllegalArgumentException(bad);
-        boolean grass;
+        boolean grass = false, png = false;
         switch (rest.substring(0, colon)) {
-            case "gen" -> grass = false;
+            case "gen" -> { }
             case "grass" -> grass = true;
+            case "png" -> png = true;
             default -> throw new IllegalArgumentException(bad);
         }
         String[] halves = rest.substring(colon + 1).split("@", -1);
@@ -232,6 +259,12 @@ public final class Scene {
             stones = new int[cells.length][];
             for (int c = 0; c < cells.length; c++) stones[c] = ints(cells[c], bad);
         }
+        int[] spawn = ints(halves[1], bad);
+        if (png) {
+            Level loaded = loadLevel(halves[0], spec);
+            return new Scene(sheet(), false, 0, 0, 0, 0, null, Screen.MIRROR_NONE, null, null,
+                    new GameSpec(false, loaded.width(), loaded.height(), 0, spawn[0], spawn[1], stones, loaded));
+        }
         String[] g = halves[0].split(",", -1);
         if (g.length != (grass ? 2 : 3)) throw new IllegalArgumentException(bad);
         int w, h;
@@ -243,20 +276,21 @@ public final class Scene {
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException(bad);
         }
-        int[] spawn = ints(halves[1], bad);
         if (w < 1 || h < 1 || (long) w * h > Level.MAX_CELLS) {
             throw new IllegalArgumentException("bad --scene '" + spec + "': level size must be at least 1x1 and at most "
                     + Level.MAX_CELLS + " cells");
         }
         return new Scene(sheet(), false, 0, 0, 0, 0, null, Screen.MIRROR_NONE, null, null,
-                new GameSpec(grass, w, h, seed, spawn[0], spawn[1], stones));
+                new GameSpec(grass, w, h, seed, spawn[0], spawn[1], stones, null));
     }
 
     /** A fresh {@link World} (new level, new player at the spawn) for a {@code game:} scene; null for any other scene. */
     public World newWorld() {
         if (game == null) return null;
         Level l;
-        if (game.grass()) {
+        if (game.loaded() != null) {
+            l = game.loaded().copy(); // a fresh level each call: the stone option and play must not leak into the next world
+        } else if (game.grass()) {
             l = new Level(game.width(), game.height());
             for (int ty = 0; ty < game.height(); ty++) {
                 for (int tx = 0; tx < game.width(); tx++) l.setTile(tx, ty, Tile.GRASS);

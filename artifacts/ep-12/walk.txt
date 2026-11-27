@@ -1,0 +1,12 @@
+1 press RIGHT
+61 release RIGHT
+61 press DOWN
+121 release DOWN
+121 press LEFT
+201 release LEFT
+201 press UP
+281 release UP
+281 press RIGHT
+281 press DOWN
+341 release RIGHT
+341 release DOWN

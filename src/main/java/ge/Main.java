@@ -9,7 +9,7 @@ import java.nio.file.Paths;
  * Entry point.
  *   java -jar game.jar                                     opens the window
  *   java -jar game.jar --headless --ticks N [--seed S] [--script FILE] [--dump-dir DIR]
- *                      [--scene tile:TX,TY@PX,PY] [--trace-input]
+ *                      [--scene SPEC] [--trace-input]
  *   --script FILE    scripted key events (docs/script-format.md); a bad file exits 2 before running
  *   --trace-input    print one "tick=T up=U down=D left=L right=R" line per tick
  */
@@ -44,7 +44,7 @@ public class Main {
             if (scriptFile != null) script = InputScript.load(scriptFile);
         } catch (IllegalArgumentException e) {
             System.err.println(e.getMessage());
-            System.err.println("usage: [--headless --ticks N [--seed S] [--script FILE] [--dump-dir DIR] [--scene tile:TX,TY@PX,PY] [--trace-input]]");
+            System.err.println("usage: [--headless --ticks N [--seed S] [--script FILE] [--dump-dir DIR] [--scene SPEC] [--trace-input]]");
             System.exit(2);
             return;
         }

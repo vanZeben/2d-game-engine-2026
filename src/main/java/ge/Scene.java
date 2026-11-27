@@ -105,7 +105,7 @@ public final class Scene {
     }
 
     /** The sprite sheet is decoded once and shared by every scene in the process. */
-    static synchronized SpriteSheet sheet() {
+    public static synchronized SpriteSheet sheet() {
         if (sharedSheet == null) sharedSheet = SpriteSheet.load(PATH);
         return sharedSheet;
     }

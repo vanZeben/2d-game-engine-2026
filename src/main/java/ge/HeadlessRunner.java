@@ -34,10 +34,20 @@ public class HeadlessRunner {
      */
     public static Result run(Game game, long ticks, Path dumpDir, InputScript script, PrintStream trace,
             PrintStream tracePlayer, boolean traceSwim) {
+        return run(game, ticks, dumpDir, script, trace, tracePlayer, traceSwim, false);
+    }
+
+    /**
+     * @param realtime pace the ticks at {@link Game#TICKS_PER_SECOND} per second instead of running as fast as possible
+     */
+    public static Result run(Game game, long ticks, Path dumpDir, InputScript script, PrintStream trace,
+            PrintStream tracePlayer, boolean traceSwim, boolean realtime) {
         Screen screen = new Screen(Game.WIDTH, Game.HEIGHT);
         FrameDumper dumper = dumpDir == null ? null : new FrameDumper(dumpDir);
         InputScript.Player player = script.player(game.input());
         int frames = 0;
+        long step = 1_000_000_000L / Game.TICKS_PER_SECOND;
+        long next = System.nanoTime();
         for (long i = 0; i < ticks; i++) {
             player.advanceTo(game.tickCount() + 1); // ticks are numbered from 1
             game.tick();
@@ -46,6 +56,20 @@ public class HeadlessRunner {
             game.render(screen);
             frames++;
             if (dumper != null) dumper.dump(screen);
+            if (realtime) {
+                next += step;
+                long wait = next - System.nanoTime();
+                if (wait > 0) {
+                    try {
+                        Thread.sleep(wait / 1_000_000L, (int) (wait % 1_000_000L));
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                } else {
+                    next = System.nanoTime(); // fell behind: don't try to catch up
+                }
+            }
         }
         return new Result(game.tickCount(), frames);
     }

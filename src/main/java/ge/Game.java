@@ -20,6 +20,8 @@ public class Game {
     /** The playable world of a {@code game:} scene, else null. */
     private final World world;
     private long tickCount;
+    /** Runs on the game thread at the start of every tick: how the network feeds the world. */
+    private Runnable beforeTick = () -> {};
 
     public Game() {
         this(null);
@@ -52,9 +54,15 @@ public class Game {
         return random;
     }
 
+    /** Sets what runs at the start of each tick, on the thread that ticks the game (e.g. draining the network inbox). */
+    public void beforeTick(Runnable r) {
+        this.beforeTick = r == null ? () -> {} : r;
+    }
+
     /** Advances the simulation by one fixed step. */
     public void tick() {
         tickCount++;
+        beforeTick.run();
         if (world != null) world.tick(input);
     }
 

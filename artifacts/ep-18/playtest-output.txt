@@ -1,0 +1,30 @@
+server port=33516
+PASS alice acked (spawn 200,200)
+PASS alice alone: no remote players
+PASS bob acked (spawn 230,215)
+PASS carol acked (spawn 180,190)
+PASS alice sees 2 remote players (got 2)
+server.playerNames=[alice, bob, carol]
+server.clientCount=3
+PASS server lists alice, bob, carol
+alice world player=(200,200) camera=(128,148)
+remote name=bob pos=(230,215) dir=DOWN walkFrame=0 screen=(102,67)
+remote name=carol pos=(180,190) dir=DOWN walkFrame=0 screen=(52,42)
+PASS bob at 230,215
+PASS carol at 180,190
+expected bob sprite box at screen (102,67), carol at (52,42)
+PASS bob's sprite is at (230,215) - camera
+PASS carol's sprite is at (180,190) - camera
+PASS bob's box changed from the alone frame
+changed pixels: in bob box=150 in carol box=150 outside both=0
+PASS no pixels changed outside the two sprite boxes
+PASS alice's own sprite unchanged at centre
+jar client exit=0 output:
+client joined server=127.0.0.1:33516
+ticks=30 frames=30
+PASS jar client exits 0
+PASS jar client reports joined
+PASS server lists dave: [alice, bob, carol, dave]
+server.playerNames after dave=[alice, bob, carol, dave]
+alice remote players after dave=3 [bob, carol, dave]
+ALL CHECKS PASSED

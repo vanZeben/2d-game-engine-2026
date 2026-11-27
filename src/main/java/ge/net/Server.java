@@ -27,8 +27,11 @@ public final class Server extends Endpoint {
     /** Prefix of the names the server gives to nameless clients. */
     private static final String GENERATED_PREFIX = "guest";
 
-    /** A logged-in address. {@code named} is false for nameless clients (generated name): nobody is told about them. */
-    private record Entry(String name, boolean named) {}
+    /**
+     * A logged-in address. {@code named} is false for nameless clients (generated name): nobody is told about them.
+     * (x, y) is the spawn position from the login (0, 0 for a nameless client, never sent).
+     */
+    private record Entry(String name, boolean named, int x, int y) {}
 
     private final Object lock = new Object();
     /** Logged-in players by address, in login order. Guarded by {@link #lock}. */
@@ -86,25 +89,43 @@ public final class Server extends Endpoint {
     }
 
     /**
-     * Registers the address (once), acks, and for a new named player tells every other registered address.
-     * {@code name} is null for the nameless form. A repeated login changes nothing and is not announced again.
-     * Two players may still share a chosen name until a later episode rejects duplicates; generated names never
-     * collide with a name already held.
+     * Registers the address (once), acks, and for a new named player tells every other registered address about
+     * them. A named player is also told about every other named player already logged in (one
+     * {@link GamePacket.PlayerJoined} each, at that player's login position). {@code name} is null for the nameless
+     * form, which is never announced to anyone and is told nothing. A repeated login registers nobody and announces
+     * nothing to the others, but the roster is sent to the repeater again: its first copy may have been lost, and
+     * the client ignores names it already shows. Two players may still share a chosen name until a later episode
+     * rejects duplicates; generated names never collide with a name already held.
      */
     private void onLogin(SocketAddress from, String name, int x, int y) {
         List<SocketAddress> others = null;
+        List<byte[]> roster = null;
         synchronized (lock) {
-            if (!players.containsKey(from)) {
+            Entry self = players.get(from);
+            if (self == null) {
                 if (players.size() >= MAX_CLIENTS) return;
                 if (name == null) {
-                    players.put(from, new Entry(generateName(), false));
+                    players.put(from, new Entry(generateName(), false, 0, 0));
                 } else {
                     others = new ArrayList<>(players.keySet());
-                    players.put(from, new Entry(name, true));
+                    self = new Entry(name, true, x, y);
+                    players.put(from, self);
+                }
+            }
+            if (self != null && self.named()) {
+                roster = new ArrayList<>();
+                for (Map.Entry<SocketAddress, Entry> e : players.entrySet()) {
+                    Entry other = e.getValue();
+                    if (!e.getKey().equals(from) && other.named()) {
+                        roster.add(new GamePacket.PlayerJoined(other.name(), other.x(), other.y()).toBytes());
+                    }
                 }
             }
         }
         reply(from, Protocol.JOIN_ACK);
+        if (roster != null) {
+            for (byte[] notice : roster) reply(from, notice);
+        }
         if (others != null) {
             byte[] notice = new GamePacket.PlayerJoined(name, x, y).toBytes();
             for (SocketAddress other : others) reply(other, notice);

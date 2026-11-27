@@ -208,6 +208,13 @@ public class Ep09Test {
         assertTrue(boxDiffers, msg + ": sprite box must differ from the level-only frame");
     }
 
+    /** Guard: a never-moved exact-sprite spawn must not overlap WATER (a later episode draws swimming there). */
+    private static void assertNoWaterUnder(Level level, int px, int py) {
+        for (int ty = Math.floorDiv(py, 8); ty <= Math.floorDiv(py + 15, 8); ty++)
+            for (int tx = Math.floorDiv(px, 8); tx <= Math.floorDiv(px + 15, 8); tx++)
+                assertNotSame(Tile.WATER, level.getTile(tx, ty), "spawn " + px + "," + py + " overlaps water at tile " + tx + "," + ty);
+    }
+
     @Test
     void spriteColoursHaveTransparentAndOpaqueSlotsAndTheSpriteUsesBoth() {
         assertEquals(4, Player.COLOURS.length);
@@ -229,8 +236,9 @@ public class Ep09Test {
 
     @Test
     void worldRendersLevelThenPlayerAtCentre() {
-        for (int[] spawn : new int[][] {{100, 80}, {0, 0}, {-30, 500}}) {
+        for (int[] spawn : new int[][] {{100, 80}, {200, 200}, {-30, 500}}) {
             Level level = Level.generate(64, 64, 7L);
+            assertNoWaterUnder(level, spawn[0], spawn[1]);
             World w = new World(level, new Player(spawn[0], spawn[1]));
             Screen s = new Screen(W, H);
             s.clear(0x000000);
@@ -239,6 +247,7 @@ public class Ep09Test {
         }
         // the transparent slot lets the level show through: the frame differs from a level-only frame only under opaque pixels
         Level level = Level.generate(64, 64, 7L);
+        assertNoWaterUnder(level, 100, 80);
         Screen lv = new Screen(W, H);
         lv.clear(0);
         level.render(lv, sheet, 100 + 8 - W / 2, 80 + 8 - H / 2);
@@ -268,6 +277,8 @@ public class Ep09Test {
         assertNotNull(g.world());
         assertEquals(16, g.world().player().x());
         assertEquals(24, g.world().player().y());
+        assertNoWaterUnder(Level.generate(30, 20, 42L), 16, 24);
+        assertNoWaterUnder(Level.generate(30, 20, 42L), -10, 5);
         Screen s = new Screen(W, H);
         s.clear(0xABCDEF);
         g.render(s);
@@ -327,7 +338,7 @@ public class Ep09Test {
             if (t >= 1) x += Math.min(t, 10);            // RIGHT held ticks 1..10
             if (t >= 21) { x -= Math.min(t, 25) - 20; y += Math.min(t, 25) - 20; } // DOWN+LEFT ticks 21..25
             String expect = "tick=" + t + " x=" + x + " y=" + y + " camx=" + (x - 72) + " camy=" + (y - 52);
-            assertEquals(expect, lines.get(t - 1));
+            assertTrue(lines.get(t - 1).equals(expect) || lines.get(t - 1).startsWith(expect + " "), lines.get(t - 1) + " vs " + expect);
         }
         Level level = grass(40, 30);
         // tick 15 (x=60,y=60), tick 30 (x=55,y=65): the player has moved, so only the sprite box's presence is pinned

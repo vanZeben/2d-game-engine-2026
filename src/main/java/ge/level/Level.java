@@ -70,6 +70,14 @@ public final class Level {
      * level draw as void, and any offset (negative, not a multiple of 8, near the int limits) is fine.
      */
     public void render(Screen screen, SpriteSheet sheet, int xOffset, int yOffset) {
+        render(screen, sheet, xOffset, yOffset, 0L);
+    }
+
+    /**
+     * As {@link #render(Screen, SpriteSheet, int, int)} but at world time {@code tick} (>= 0): water cells draw
+     * their animation frame {@link Tile#waterFrame(long)}; every other tile is the same at any tick.
+     */
+    public void render(Screen screen, SpriteSheet sheet, int xOffset, int yOffset, long tick) {
         if (screen == null) throw new IllegalArgumentException("screen is null");
         if (sheet == null) throw new IllegalArgumentException("sheet is null");
         int size = Screen.TILE_SIZE;
@@ -80,11 +88,12 @@ public final class Level {
         long lastX = Math.floorDiv((long) xOffset + screen.width - 1, (long) size);
         long firstY = Math.floorDiv((long) yOffset, (long) size);
         long lastY = Math.floorDiv((long) yOffset + screen.height - 1, (long) size);
+        int waterX = Tile.waterFrame(tick);
         for (long cy = firstY; cy <= lastY; cy++) {
             int py = (int) (cy * size - yOffset);
             for (long cx = firstX; cx <= lastX; cx++) {
                 Tile t = getTile((int) cx, (int) cy);
-                screen.drawPaletteTile(sheet, t.sheetX(), t.sheetY(), (int) (cx * size - xOffset), py, t.paletteColours());
+                screen.drawPaletteTile(sheet, t == Tile.WATER ? waterX : t.sheetX(), t.sheetY(), (int) (cx * size - xOffset), py, t.paletteColours());
             }
         }
     }

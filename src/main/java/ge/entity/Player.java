@@ -24,6 +24,11 @@ public final class Player extends Mob {
     public static final int[] COLOURS = {
         Palette.TRANSPARENT, Palette.index(1, 1, 3), Palette.index(5, 4, 3), Palette.index(5, 5, 5)};
 
+    /** Sheet tile of the swimming ripple and its colours: only sheet colour-index 2 is drawn, in white. */
+    private static final int RIPPLE_TX = 2, RIPPLE_TY = 5;
+    private static final int[] RIPPLE_COLOURS = {
+        Palette.TRANSPARENT, Palette.TRANSPARENT, Palette.index(5, 5, 5), Palette.TRANSPARENT};
+
     /** @param x world pixel x of the sprite's top-left corner @param y likewise for y */
     public Player(int x, int y) {
         super(x, y);
@@ -58,7 +63,7 @@ public final class Player extends Mob {
 
     @Override
     public void render(Screen screen, SpriteSheet sheet, int xOffset, int yOffset) {
-        drawPose(screen, sheet, x() - xOffset, y() - yOffset, dir(), walkFrame());
+        drawPose(screen, sheet, x() - xOffset, y() - yOffset, dir(), walkFrame(), isSwimming());
     }
 
     /**
@@ -68,6 +73,16 @@ public final class Player extends Mob {
      * LEFT flips the whole sprite.
      */
     public static void drawPose(Screen screen, SpriteSheet sheet, int sx, int sy, Dir dir, int walkFrame) {
+        drawPose(screen, sheet, sx, sy, dir, walkFrame, false);
+    }
+
+    /**
+     * As the 6-argument pose; with {@code swimming} only the top half (rows 0..7) of the pose is drawn and the
+     * lower half is left as it is except for a ripple: sheet tile (2, 5) at (sx, sy+8) and again mirrored at
+     * (sx+8, sy+8), drawing only its colour-index-2 pixels in {@link #RIPPLE_COLOUR}.
+     */
+    public static void drawPose(Screen screen, SpriteSheet sheet, int sx, int sy, Dir dir, int walkFrame,
+            boolean swimming) {
         int col;
         boolean mirror;
         switch (dir) {
@@ -82,6 +97,11 @@ public final class Player extends Mob {
         int leftX = mirror ? sx + half : sx, rightX = mirror ? sx : sx + half;
         screen.drawPaletteTile(sheet, col, SHEET_Y, leftX, sy, COLOURS, flip);
         screen.drawPaletteTile(sheet, col + 1, SHEET_Y, rightX, sy, COLOURS, flip);
+        if (swimming) {
+            screen.drawPaletteTile(sheet, RIPPLE_TX, RIPPLE_TY, sx, sy + half, RIPPLE_COLOURS);
+            screen.drawPaletteTile(sheet, RIPPLE_TX, RIPPLE_TY, sx + half, sy + half, RIPPLE_COLOURS, Screen.MIRROR_X);
+            return;
+        }
         screen.drawPaletteTile(sheet, col, SHEET_Y + 1, leftX, sy + half, COLOURS, flip);
         screen.drawPaletteTile(sheet, col + 1, SHEET_Y + 1, rightX, sy + half, COLOURS, flip);
     }

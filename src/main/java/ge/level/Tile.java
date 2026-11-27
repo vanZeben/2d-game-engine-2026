@@ -9,7 +9,7 @@ import java.util.List;
  * <p>Each tile has a stable id (its index in {@link #all()}), a solidity flag for collision (episode 12), the
  * 0xRRGGBB colour that marks it in a level PNG (episode 13), its coordinates in the sprite sheet (tile units)
  * and the four {@link Palette} colours it is drawn with. Water's sheet coordinates are those of its first
- * animation frame; episode 14 cycles the frames.
+ * animation frame; it cycles {@link #WATER_FRAMES} frames, frame f being sheet tile (f, 5) (see {@link #waterFrame}).
  */
 public final class Tile {
     public static final Tile VOID = new Tile(0, false, 0x000000, 0, 0,
@@ -20,6 +20,11 @@ public final class Tile {
             Palette.index(0, 1, 0), Palette.index(1, 3, 0), Palette.index(1, 4, 1), Palette.index(3, 5, 1));
     public static final Tile WATER = new Tile(3, false, 0x0000FF, 0, 5,
             Palette.index(0, 0, 2), Palette.index(0, 1, 4), Palette.index(1, 3, 5), Palette.index(3, 5, 5));
+
+    /** Number of animation frames of {@link #WATER}: frame f is the sheet tile (f, 5). */
+    public static final int WATER_FRAMES = 3;
+    /** Ticks each water frame is shown. */
+    public static final int WATER_FRAME_TICKS = 15;
 
     private static final List<Tile> ALL = List.of(VOID, STONE, GRASS, WATER);
 
@@ -67,6 +72,11 @@ public final class Tile {
     /** The internal colour array, for drawing without a per-tile allocation. Callers must not modify it. */
     int[] paletteColours() {
         return colours;
+    }
+
+    /** The water frame (0..{@link #WATER_FRAMES}-1) shown at world tick {@code tick} (>= 0): 0 for ticks 0..14, 1 for 15..29, 2 for 30..44, then 0 again. */
+    public static int waterFrame(long tick) {
+        return (int) ((tick / WATER_FRAME_TICKS) % WATER_FRAMES);
     }
 
     /** @throws IllegalArgumentException unless 0 <= id <= 3 */

@@ -9,10 +9,13 @@ import java.nio.file.Paths;
  * Entry point.
  *   java -jar game.jar                                     opens the window
  *   java -jar game.jar --headless --ticks N [--seed S] [--script FILE] [--dump-dir DIR]
- *                      [--scene SPEC] [--trace-input] [--trace-player]
+ *                      [--scene SPEC] [--trace-input] [--trace-player [--trace-swim]]
  *   --script FILE    scripted key events (docs/script-format.md); a bad file exits 2 before running
  *   --trace-input    print one "tick=T up=U down=D left=L right=R" line per tick
  *   --trace-player   with a game: scene, print one "tick=T x=X y=Y camx=CX camy=CY dir=D frame=F" line per tick
+ *   --trace-swim     with --trace-player (else exit 2): append " swim=S" to each line (S = 1 while the player stands in water, else 0)
+ *   --scene game:...  a game scene may end with :stone=TX,TY;... and/or :water=TX,TY;... (each at most once, either
+ *                    order): those cells become stone (solid) or water (animated; the player swims in it)
  * Without --scene the window plays a generated world (game:gen).
  */
 public class Main {
@@ -28,6 +31,7 @@ public class Main {
         Path scriptFile = null;
         boolean traceInput = false;
         boolean tracePlayer = false;
+        boolean traceSwim = false;
         InputScript script = InputScript.empty();
         try {
             for (int i = 0; i < args.length; i++) {
@@ -40,9 +44,11 @@ public class Main {
                     case "--script" -> scriptFile = Paths.get(value(args, ++i));
                     case "--trace-input" -> traceInput = true;
                     case "--trace-player" -> tracePlayer = true;
+                    case "--trace-swim" -> traceSwim = true;
                     default -> throw new IllegalArgumentException("unknown argument: " + args[i]);
                 }
             }
+            if (traceSwim && !tracePlayer) throw new IllegalArgumentException("--trace-swim needs --trace-player");
             if (ticks < 0) throw new IllegalArgumentException("--ticks must be >= 0");
             if (!headless && (scriptFile != null || traceInput || tracePlayer)) {
                 throw new IllegalArgumentException("--script, --trace-input and --trace-player need --headless");
@@ -52,21 +58,21 @@ public class Main {
             if (!headless && scene == null) scene = Scene.parse(DEFAULT_WINDOW_SCENE);
         } catch (IllegalArgumentException e) {
             System.err.println(e.getMessage());
-            System.err.println("usage: [--headless --ticks N [--seed S] [--script FILE] [--dump-dir DIR] [--scene SPEC] [--trace-input] [--trace-player]]");
+            System.err.println("usage: [--headless --ticks N [--seed S] [--script FILE] [--dump-dir DIR] [--scene SPEC] [--trace-input] [--trace-player [--trace-swim]]]");
             System.exit(2);
             return;
         }
 
         Game game = new Game(scene, seed);
         if (tracePlayer && game.world() == null) {
-            System.err.println("--trace-player needs a game: scene (--scene game:gen:W,H,SEED@X,Y or game:grass:W,H@X,Y)");
+            System.err.println("--trace-player needs a game: scene (--scene game:gen:W,H,SEED@X,Y or game:grass:W,H@X,Y, optionally with :stone=/:water= cell lists)");
             System.exit(2);
             return;
         }
         if (headless) {
             System.setProperty("java.awt.headless", "true");
             HeadlessRunner.Result r = HeadlessRunner.run(game, ticks, dumpDir, script, traceInput ? System.out : null,
-                    tracePlayer ? System.out : null);
+                    tracePlayer ? System.out : null, traceSwim);
             System.out.println("ticks=" + r.ticks() + " frames=" + r.frames());
         } else {
             if (GraphicsEnvironment.isHeadless()) {

@@ -99,6 +99,18 @@ public abstract class Mob {
         for (int i = Math.abs(dy), sy = Integer.signum(dy); i > 0 && !hitsSolid(x, y + sy); i--) y += sy;
     }
 
+    /**
+     * Is the mob swimming: it has a level and the tile containing the centre of its collision box (world pixel
+     * (x + (boxX0+boxX1)/2, y + (boxY0+boxY1)/2), cell = floorDiv by 8) is {@link Tile#WATER}? Depends only on
+     * position and level.
+     */
+    public boolean isSwimming() {
+        if (level == null) return false;
+        int size = ge.Screen.TILE_SIZE;
+        return level.getTile(Math.floorDiv(x + (boxX0() + boxX1()) / 2, size),
+                Math.floorDiv(y + (boxY0() + boxY1()) / 2, size)) == Tile.WATER;
+    }
+
     /** Does the box of a mob at (px, py) overlap a solid tile? Visits only the cells the box touches. */
     private boolean hitsSolid(int px, int py) {
         int size = ge.Screen.TILE_SIZE;

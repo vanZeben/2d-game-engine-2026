@@ -154,10 +154,12 @@ public class Ep19Test {
         });
         drain.start();
         try {
+            until(() -> server.playerNames().contains("carol") || !p.isAlive(), 10000);
+            boolean registeredWhileRunning = server.playerNames().contains("carol");
             assertTrue(p.waitFor(90, TimeUnit.SECONDS), "client hung: " + out);
             drain.join(2000);
             assertEquals(0, p.exitValue(), out.toString());
-            assertTrue(server.playerNames().contains("carol"), server.playerNames().toString());
+            assertTrue(registeredWhileRunning, "server never listed carol while the client ran: " + out);
             List<Path> frames;
             try (var st = Files.list(dir)) {
                 frames = st.filter(f -> f.getFileName().toString().matches("frame-\\d+\\.png")).sorted().toList();

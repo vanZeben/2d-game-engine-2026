@@ -29,9 +29,11 @@ public final class Server extends Endpoint {
 
     /**
      * A logged-in address. {@code named} is false for nameless clients (generated name): nobody is told about them.
-     * (x, y) is the spawn position from the login (0, 0 for a nameless client, never sent).
+     * (x, y, dir, frame) is the player's latest known state: the spawn position from the login (0, 0 for a nameless
+     * client, never sent), then whatever its newest accepted {@link GamePacket.Move} said; {@code seq} is that move's
+     * sequence number, -1 until one arrives (a fresh login makes a fresh entry, so it resets).
      */
-    private record Entry(String name, boolean named, int x, int y) {}
+    private record Entry(String name, boolean named, int x, int y, int dir, int frame, int seq) {}
 
     private final Object lock = new Object();
     /** Logged-in players by address, in login order. Guarded by {@link #lock}. */
@@ -81,12 +83,17 @@ public final class Server extends Endpoint {
             onPing(from);
             return true;
         }
-        if (GamePacket.parse(data).orElse(null) instanceof GamePacket.Login login) {
+        GamePacket packet = GamePacket.parse(data).orElse(null);
+        if (packet instanceof GamePacket.Login login) {
             onLogin(from, login.name(), login.x(), login.y());
             return true;
         }
-        if (GamePacket.parse(data).orElse(null) instanceof GamePacket.Disconnect) {
+        if (packet instanceof GamePacket.Disconnect) {
             onDisconnect(from);
+            return true;
+        }
+        if (packet instanceof GamePacket.Move move) {
+            onMove(from, move);
             return true;
         }
         return false;
@@ -116,7 +123,7 @@ public final class Server extends Endpoint {
     /**
      * Registers the address (once), acks, and for a new named player tells every other registered address about
      * them. A named player is also told about every other named player already logged in (one
-     * {@link GamePacket.PlayerJoined} each, at that player's login position). {@code name} is null for the nameless
+     * {@link GamePacket.PlayerJoined} each, at that player's current position: the login position until it moves). {@code name} is null for the nameless
      * form, which is never announced to anyone and is told nothing. A repeated login registers nobody and announces
      * nothing to the others, but the roster is sent to the repeater again: its first copy may have been lost, and
      * the client ignores names it already shows. Two players may still share a chosen name until a later episode
@@ -130,10 +137,10 @@ public final class Server extends Endpoint {
             if (self == null) {
                 if (players.size() >= MAX_CLIENTS) return;
                 if (name == null) {
-                    players.put(from, new Entry(generateName(), false, 0, 0));
+                    players.put(from, new Entry(generateName(), false, 0, 0, 0, 0, -1));
                 } else {
                     others = new ArrayList<>(players.keySet());
-                    self = new Entry(name, true, x, y);
+                    self = new Entry(name, true, x, y, 0, 0, -1);
                     players.put(from, self);
                 }
             }
@@ -155,6 +162,26 @@ public final class Server extends Endpoint {
             byte[] notice = new GamePacket.PlayerJoined(name, x, y).toBytes();
             for (SocketAddress other : others) reply(other, notice);
         }
+    }
+
+    /**
+     * A move from a registered, named address with a seq higher than the one stored for that player replaces the
+     * player's stored state and is relayed, under the registered name and with the sender's seq, to every other
+     * registered address (never back to the sender). Anything else (unknown address, nameless client, stale or
+     * repeated seq) is dropped without a word: moves are not acked.
+     */
+    private void onMove(SocketAddress from, GamePacket.Move move) {
+        List<SocketAddress> others;
+        byte[] relay;
+        synchronized (lock) {
+            Entry e = players.get(from);
+            if (e == null || !e.named() || move.seq() <= e.seq()) return;
+            players.put(from, new Entry(e.name(), true, move.x(), move.y(), move.dir(), move.walkFrame(), move.seq()));
+            others = new ArrayList<>(players.keySet());
+            others.remove(from);
+            relay = new GamePacket.Move(e.name(), move.x(), move.y(), move.dir(), move.walkFrame(), move.seq()).toBytes();
+        }
+        for (SocketAddress other : others) reply(other, relay);
     }
 
     private String generateName() {

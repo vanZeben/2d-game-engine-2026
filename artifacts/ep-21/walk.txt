@@ -1,0 +1,7 @@
+# ep21 playtest: alice walks RIGHT 60 ticks, DOWN 40, LEFT 30
+1 press RIGHT
+61 release RIGHT
+61 press DOWN
+101 release DOWN
+101 press LEFT
+131 release LEFT

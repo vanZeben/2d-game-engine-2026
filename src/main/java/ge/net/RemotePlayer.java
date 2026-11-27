@@ -12,6 +12,8 @@ import ge.gfx.SpriteSheet;
  */
 public final class RemotePlayer extends Mob {
     private final String name;
+    /** Seq of the last move applied; -1 for a new remote, so the first move (seq >= 0) is accepted. Game thread only. */
+    private int lastSeq = -1;
 
     /** @param x,y world pixel of the sprite's top-left corner, from the packet */
     public RemotePlayer(String name, int x, int y) {
@@ -22,6 +24,18 @@ public final class RemotePlayer extends Mob {
 
     public String name() {
         return name;
+    }
+
+    /**
+     * Newest-seq-wins: puts the player at (x, y), with no collision check, if {@code seq} is strictly higher than the
+     * last applied one; otherwise (stale, duplicate) changes nothing. Facing and walk frame are not shown yet.
+     * @return whether the move was applied
+     */
+    public boolean applyMove(int x, int y, int seq) {
+        if (seq <= lastSeq) return false;
+        lastSeq = seq;
+        setPosition(x, y);
+        return true;
     }
 
     @Override

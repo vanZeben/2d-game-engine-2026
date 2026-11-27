@@ -127,6 +127,15 @@ public final class Client extends Endpoint {
         }
     }
 
+    /** Sends a game packet to the server (not retransmitted, not acked). Safe from any thread; silently dropped once closed. */
+    public void sendToServer(GamePacket packet) {
+        try {
+            send(server, packet.toBytes());
+        } catch (IOException e) {
+            // closed under us: nothing to send to
+        }
+    }
+
     private void onPong() {
         pongLock.lock();
         try {

@@ -3,6 +3,7 @@ package ge;
 import ge.gfx.Font;
 import ge.gfx.Palette;
 import ge.gfx.SpriteSheet;
+import ge.level.Level;
 
 /**
  * A fixed test scene for headless runs, chosen with {@code --scene}. Every frame is the whole screen
@@ -17,6 +18,8 @@ import ge.gfx.SpriteSheet;
  *       (may be negative). TEXT is the last field, verbatim (it may contain ':' and may be empty); the colours
  *       option is recognised only when the part after "X,Y:" starts with {@code colours=}. Without it the
  *       text is white ink on a transparent background.</li>
+ *   <li>{@code level:gen:W,H,SEED@XOFF,YOFF} - {@link Level#generate(int, int, long)} (W,H >= 1 tiles, SEED a
+ *       long) drawn with the view scrolled to pixel offset (XOFF,YOFF) (may be negative)</li>
  * </ul>
  * The optional parts may come in either order, each at most once. M is {@code x}, {@code y} or {@code xy}
  * (flip each 8x8 block in place on X, on Y, or both).
@@ -28,6 +31,7 @@ public final class Scene {
     public static final int[] INTERIM_GREY = {0x000000, 0x555555, 0xAAAAAA, 0xFFFFFF};
 
     private static final String TEXT_PREFIX = "text:";
+    private static final String LEVEL_PREFIX = "level:";
     /** Default text colours: white ink (slot 3) over a transparent background. */
     private static final int[] TEXT_COLOURS = {Palette.TRANSPARENT, Palette.TRANSPARENT, Palette.TRANSPARENT,
         Palette.index(5, 5, 5)};
@@ -41,11 +45,13 @@ public final class Scene {
     private final int mirror;
     /** The text of a {@code text:} scene, or null for a tile scene. */
     private final String text;
+    /** The level of a {@code level:} scene (drawn at offset x,y), or null. */
+    private final Level level;
     /** Palette indexes / TRANSPARENT, or null for the interim grey. */
     private final int[] colours;
 
     private Scene(SpriteSheet sheet, boolean fill, int tileX, int tileY, int x, int y, int[] colours, int mirror,
-            String text) {
+            String text, Level level) {
         this.sheet = sheet;
         this.fill = fill;
         this.tileX = tileX;
@@ -55,6 +61,7 @@ public final class Scene {
         this.colours = colours;
         this.mirror = mirror;
         this.text = text;
+        this.level = level;
     }
 
     /** The sprite sheet is decoded once and shared by every scene in the process. */
@@ -66,6 +73,7 @@ public final class Scene {
     /** Parses a scene spec and loads the sprite sheet it needs. @throws IllegalArgumentException if malformed. */
     public static Scene parse(String spec) {
         if (spec.startsWith(TEXT_PREFIX)) return parseText(spec);
+        if (spec.startsWith(LEVEL_PREFIX)) return parseLevel(spec);
         String bad = "bad --scene '" + spec + "' (expected tile:TX,TY@PX,PY[:colours=C0,C1,C2,C3][:mirror=M] "
                 + "or fill:TX,TY[:colours=C0,C1,C2,C3][:mirror=M]; Ci = three digits 0..5 or t; M = x, y or xy)";
         String[] parts = spec.split(":", -1);
@@ -106,7 +114,7 @@ public final class Scene {
             throw new IllegalArgumentException("bad --scene '" + spec + "': tile outside the "
                     + tilesX + "x" + tilesY + " grid");
         }
-        return new Scene(sheet, fill, tile[0], tile[1], pos[0], pos[1], colours, mirror, null);
+        return new Scene(sheet, fill, tile[0], tile[1], pos[0], pos[1], colours, mirror, null, null);
     }
 
     /** {@code text:X,Y[:colours=...]:TEXT}. TEXT is everything after the delimiter, so it may contain ':'. */
@@ -125,7 +133,36 @@ public final class Scene {
             colours = colours(after.substring(0, end), bad);
             after = after.substring(end + 1);
         }
-        return new Scene(sheet(), false, 0, 0, pos[0], pos[1], colours, Screen.MIRROR_NONE, after);
+        return new Scene(sheet(), false, 0, 0, pos[0], pos[1], colours, Screen.MIRROR_NONE, after, null);
+    }
+
+    /** {@code level:gen:W,H,SEED@XOFF,YOFF}. */
+    private static Scene parseLevel(String spec) {
+        String bad = "bad --scene '" + spec + "' (expected level:gen:W,H,SEED@XOFF,YOFF; W,H >= 1 tiles, "
+                + "SEED a long, XOFF,YOFF integers)";
+        String gen = "level:gen:";
+        if (!spec.startsWith(gen)) throw new IllegalArgumentException(bad);
+        String[] halves = spec.substring(gen.length()).split("@", -1);
+        if (halves.length != 2) throw new IllegalArgumentException(bad);
+        String[] g = halves[0].split(",", -1);
+        if (g.length != 3) throw new IllegalArgumentException(bad);
+        int w, h;
+        long seed;
+        try {
+            w = Integer.parseInt(g[0].trim());
+            h = Integer.parseInt(g[1].trim());
+            seed = Long.parseLong(g[2].trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(bad);
+        }
+        int[] off = ints(halves[1], bad);
+        Level level;
+        try {
+            level = Level.generate(w, h, seed);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("bad --scene '" + spec + "': " + e.getMessage());
+        }
+        return new Scene(sheet(), false, 0, 0, off[0], off[1], null, Screen.MIRROR_NONE, null, level);
     }
 
     private static int[] ints(String pair, String error) {
@@ -173,7 +210,9 @@ public final class Scene {
 
     public void render(Screen screen) {
         screen.clear(0x000000);
-        if (text != null) {
+        if (level != null) {
+            level.render(screen, sheet, x, y);
+        } else if (text != null) {
             Font.render(screen, sheet, text, x, y, colours);
         } else if (fill) {
             for (int py = 0; py < screen.height; py += Screen.TILE_SIZE) {

@@ -1,0 +1,4 @@
+5 press RIGHT
+45 release RIGHT
+49 press LEFT
+89 release LEFT

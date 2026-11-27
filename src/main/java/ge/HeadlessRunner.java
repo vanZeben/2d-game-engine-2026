@@ -21,11 +21,19 @@ public class HeadlessRunner {
     }
 
     /**
-     * @param tracePlayer if non-null (needs a game world), receives one {@code tick=T x=X y=Y camx=CX camy=CY dir=D frame=F} line
+     * @param tracePlayer if non-null (needs a game world), receives one {@code tick=T x=X y=Y camx=CX camy=CY dir=D frame=F} line (plus {@code swim=S} with traceSwim)
      *                    after each tick's update, after the {@code trace} line of that tick
      */
     public static Result run(Game game, long ticks, Path dumpDir, InputScript script, PrintStream trace,
             PrintStream tracePlayer) {
+        return run(game, ticks, dumpDir, script, trace, tracePlayer, false);
+    }
+
+    /**
+     * @param traceSwim append {@code " swim=S"} (S = 1 while the player is swimming, else 0) to each tracePlayer line
+     */
+    public static Result run(Game game, long ticks, Path dumpDir, InputScript script, PrintStream trace,
+            PrintStream tracePlayer, boolean traceSwim) {
         Screen screen = new Screen(Game.WIDTH, Game.HEIGHT);
         FrameDumper dumper = dumpDir == null ? null : new FrameDumper(dumpDir);
         InputScript.Player player = script.player(game.input());
@@ -34,7 +42,7 @@ public class HeadlessRunner {
             player.advanceTo(game.tickCount() + 1); // ticks are numbered from 1
             game.tick();
             if (trace != null) trace.println(traceLine(game));
-            if (tracePlayer != null) tracePlayer.println(playerLine(game));
+            if (tracePlayer != null) tracePlayer.println(playerLine(game, traceSwim));
             game.render(screen);
             frames++;
             if (dumper != null) dumper.dump(screen);
@@ -42,11 +50,12 @@ public class HeadlessRunner {
         return new Result(game.tickCount(), frames);
     }
 
-    static String playerLine(Game game) {
+    static String playerLine(Game game, boolean withSwim) {
         World w = game.world();
         return "tick=" + game.tickCount() + " x=" + w.player().x() + " y=" + w.player().y()
                 + " camx=" + w.cameraX() + " camy=" + w.cameraY()
-                + " dir=" + w.player().dir().name().toLowerCase() + " frame=" + w.player().walkFrame();
+                + " dir=" + w.player().dir().name().toLowerCase() + " frame=" + w.player().walkFrame()
+                + (withSwim ? " swim=" + (w.player().isSwimming() ? 1 : 0) : "");
     }
 
     static String traceLine(Game game) {

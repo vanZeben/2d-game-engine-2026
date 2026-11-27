@@ -18,6 +18,7 @@ public final class World {
     private final Level level;
     private final Player player;
     private final List<Mob> entities = new ArrayList<>();
+    private long tickCount;
 
     /** The player becomes the first entity. */
     public World(Level level, Player player) {
@@ -57,10 +58,16 @@ public final class World {
 
     /** One fixed step: the player reads the input, every other mob ticks on its own. */
     public void tick(InputHandler in) {
+        tickCount++;
         player.tick(in);
         for (Mob m : entities) {
             if (m != player) m.tick();
         }
+    }
+
+    /** Number of {@link #tick} calls so far (0 for a new world); the clock the level's water animation runs on. */
+    public long tickCount() {
+        return tickCount;
     }
 
     /** World pixel shown at screen x 0: the player's sprite stays centred. Not clamped to the level. */
@@ -73,10 +80,10 @@ public final class World {
         return player.y() + Player.SIZE / 2 - Game.HEIGHT / 2;
     }
 
-    /** Draws the level at the camera, then the entities on top. Does not clear the screen. */
+    /** Draws the level at the camera (water at {@link #tickCount()}), then the entities on top. Does not clear the screen. */
     public void render(Screen screen, SpriteSheet sheet) {
         int cx = cameraX(), cy = cameraY();
-        level.render(screen, sheet, cx, cy);
+        level.render(screen, sheet, cx, cy, tickCount);
         for (Mob m : entities) m.render(screen, sheet, cx, cy);
     }
 }

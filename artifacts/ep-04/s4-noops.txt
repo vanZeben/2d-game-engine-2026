@@ -1,0 +1,6 @@
+1 press UP
+2 press UP
+3 release DOWN
+4 release UP
+5 press F1
+6 press W

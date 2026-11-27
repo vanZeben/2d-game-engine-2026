@@ -1,0 +1,12 @@
+1 press W
+2 press UP
+5 release W
+8 release UP
+10 press LEFT
+11 press A
+14 release LEFT
+16 release A
+18 press UP
+19 press DOWN
+21 release UP
+23 release DOWN

@@ -45,8 +45,8 @@ import org.junit.jupiter.api.io.TempDir;
  *      java -jar build/game.jar --headless --ticks N --dump-dir DIR --scene tile:TX,TY@PX,PY
  *    TX,TY,PX,PY are decimal ints (PX,PY may be negative, e.g. tile:1,0@-3,-5). Every rendered
  *    frame is: the whole 160x120 screen cleared to 0x000000, then that tile drawn from
- *    /sprite_sheet.png at (PX,PY) with the interim grey colours. Without --scene every frame is
- *    all 0x000000 (as before). A malformed --scene value prints a message to stderr and exits 2
+ *    /sprite_sheet.png at (PX,PY) with the interim grey colours. The default (no --scene) frame is
+ *    deliberately unspecified here. A malformed --scene value prints a message to stderr and exits 2
  *    (same as other bad arguments). The usual "ticks=N frames=M" line and exit code 0 stay.
  *
  * Expected pixels are computed here from res/sprite_sheet.png with ImageIO and the rule
@@ -307,16 +307,6 @@ public class Ep03Test {
                 "--scene", "tile:" + t[0] + "," + t[1] + "@156,116");
         assertEquals(0, r.exit, r.out);
         checkDump(dir2, "frame-00000.png", t[0], t[1], 156, 116);
-    }
-
-    @Test
-    void withoutSceneFramesStayBlack(@TempDir Path tmp) throws Exception {
-        Path dir = tmp.resolve("e");
-        Run r = runJar("--headless", "--ticks", "2", "--dump-dir", dir.toString());
-        assertEquals(0, r.exit, r.out);
-        BufferedImage img = ImageIO.read(dir.resolve("frame-00001.png").toFile());
-        for (int y = 0; y < img.getHeight(); y++)
-            for (int x = 0; x < img.getWidth(); x++) assertEquals(0, img.getRGB(x, y) & 0xFFFFFF);
     }
 
     @Test

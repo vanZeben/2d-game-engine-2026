@@ -13,3 +13,4 @@ Run started 2026-11-27 00:36 EST (America/Toronto). Hard stop at 08:36 EST.
 - 00:41 ep-01 | attempts=1 builder (+1 test fix) | APPROVE: clean build 6/6, build.sh fails on failure, no faking | guards caught: builder refused uncompilable test (local 'java' shadowed java.util), test-writer fixed compile only
 - 00:44 ep-02 | attempts=1 | APPROVE: 12/12 clean, blue>>6 rule sound vs sheet greys, full-array check independent | guards caught: nothing
 - 00:48 ep-03 | attempts=1 (+1 lead-requested test amend) | APPROVE: 26/26 clean, independent pixel expectations, clipping incl. huge ints | guards caught: lead caught over-specified default-scene check in test
+- 00:54 ep-04 | attempts=1 | APPROVE: 42/42 clean, test failed pre-build (no ge.input), per-tick reference model, one InputHandler for window+script | guards caught: nothing blocking; playtester flagged doc ambiguity on VK_ names

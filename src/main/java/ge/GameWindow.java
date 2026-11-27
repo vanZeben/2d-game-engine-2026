@@ -6,6 +6,8 @@ import java.awt.Graphics;
 import java.awt.image.BufferStrategy;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
 import javax.swing.JFrame;
 import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
@@ -25,6 +27,15 @@ public class GameWindow extends Canvas implements Runnable {
         setPreferredSize(size);
         setMinimumSize(size);
         setMaximumSize(size);
+        setFocusable(true);
+        addKeyListener(game.input());
+        // Key-up events are lost when focus leaves; don't leave keys stuck down.
+        addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusLost(FocusEvent e) {
+                game.input().releaseAll();
+            }
+        });
     }
 
     /** Creates and shows the 480x360 window, then starts the loop. */
@@ -39,6 +50,7 @@ public class GameWindow extends Canvas implements Runnable {
             frame.setResizable(false);
             frame.setLocationRelativeTo(null);
             frame.setVisible(true);
+            canvas.requestFocusInWindow();
             canvas.start();
         });
     }

@@ -1,0 +1,17 @@
+# each key pressed alone, then released
+1 press UP
+3 release UP
+4 press DOWN
+6 release DOWN
+7 press LEFT
+9 release LEFT
+10 press RIGHT
+12 release RIGHT
+13 press W
+15 release W
+16 press S
+18 release S
+19 press A
+21 release A
+22 press D
+24 release D

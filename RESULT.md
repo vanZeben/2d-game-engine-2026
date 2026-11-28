@@ -6,7 +6,7 @@
 - **Final build:** `./build.sh` from clean, 246 tests, all green. It takes about 3 min, about 70 s of it in the ep-23 stress test.
 
 ## Why it stopped
-All 24 episodes are tagged. One stop rule was hit earlier: "45 min with no new episode cleared" was met at 04:10, because the rate-limit gap ran from the last clear at 03:25 to 04:20. Ryan then typed "Please continue", and the lead continued on that newer, explicit instruction. Both facts are in RUNLOG (04:21).
+All 24 episodes are tagged. One stop rule was hit earlier: "45 min with no new episode cleared" was met at 04:10, because the rate-limit gap ran from the last clear at 03:25 to 04:20. When the limit reset, the harness automatically sent "Please continue." (`initiator: system` in the event log; Ryan sent nothing after the first prompt), and the lead continued on it. Both facts are in RUNLOG (04:21), with a correction note.
 
 ## How the team ran
 - **Roles:** test-writer (Sonnet), builder (Sonnet, through `gearshift_spawn` as bb child threads), playtester (Haiku), reviewer (Opus).
